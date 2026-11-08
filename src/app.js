@@ -1,5 +1,6 @@
 import {normaliseState, createBackup, parseBackup, MAX_BACKUP_BYTES} from './storage.js';
 import {createDraftController} from './drafts.js';
+import {clearLegacyDemoData} from './cleanup.js';
 
 const drafts=createDraftController();
 let undoAction=null;
@@ -27,7 +28,7 @@ const modules = {
 };
 const primaryPages = ['Overview','Planner','Events','Tasks','Reminders'];
 const secondaryPages = ['Knowledge','Notes','Master','PhD'];
-const defaultTags = {Notes:[],Knowledge:['Tajwid','Sirah','Ulum Quran','Lain-lain'],Events:['Kuliah mingguan','Kuliah jemputan','Majlis kahwin','Lain-lain']};
+const defaultTags = {Notes:[],Knowledge:[],Events:[]};
 const tagSelection = {Notes:'',Events:'',Knowledge:''};
 const chapterNames=['Pengenalan','Sorotan Literatur','Metodologi','Dapatan','Perbincangan dan Kesimpulan'];
 const selectedChapter={Master:1,PhD:1};
@@ -40,44 +41,16 @@ const types = {task:'Tugasan',event:'Acara',reminder:'Peringatan'};
 const recordDateLabels={task:'Tarikh tugasan',event:'Tarikh acara',reminder:'Tarikh akhir'};
 const views = {Month:'Bulan',Week:'Minggu',Day:'Hari'};
 const statuses = {Open:'Belum selesai',Completed:'Selesai',All:'Semua'};
-const demoDate = '2026-11-05';
 const today = new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Kuala_Lumpur'}).format(new Date());
 const periods = {today:'Hari ini',week:'Minggu ini',next:'Minggu depan',month:'Bulan ini'};
 const key = 'khuttah-prototype-v2';
-const samples = [
- {id:'t1',type:'task',priority:'high',title:'Semak laporan kelas Oktober',domain:'Uthmani',date:demoDate,detail:'Semak ringkasan kelas dan kehadiran bagi kedua-dua cawangan.'},
- {id:'t2',type:'task',priority:'low',title:'Semak ringkasan hasil cawangan',domain:'KPAZ',date:demoDate,detail:'Semak ringkasan gabungan Pasir Tumboh dan Ketereh.'},
- {id:'t3',type:'task',title:'Rangka nota bacaan sirah',domain:'Peribadi',date:demoDate},
- {id:'t4',type:'task',title:'Semak navigasi KHUTTAH',domain:'Peribadi',date:'2026-11-06'},
- {id:'t5',type:'task',title:'Rancang keutamaan minggu hadapan',domain:'Peribadi',date:'2026-11-08',done:true},
- {id:'t6',type:'task',title:'Sediakan ringkasan sumbangan Kuliah Dhuha',domain:'Uthmani',date:'2026-11-10'},
- {id:'e1',type:'event',title:'Semakan operasi',domain:'Uthmani',date:demoDate,time:'09:00',repeat:'weekly'},
- {id:'e2',type:'event',title:'Semak papan pemuka klinik',domain:'KPAZ',date:demoDate,time:'14:00'},
- {id:'e3',type:'event',title:'Sesi bacaan',domain:'Peribadi',date:demoDate,time:'20:30'},
- {id:'e4',type:'event',title:'Semakan reka bentuk',domain:'Peribadi',date:'2026-11-09',time:'10:00'},
- {id:'e5',type:'event',title:'Perancangan mingguan',domain:'Peribadi',date:'2026-11-08',time:'21:00',repeat:'weekly'},
- {id:'r1',type:'reminder',title:'Semak invois November',domain:'Uthmani',date:'2026-11-08'},
- {id:'r2',type:'reminder',title:'Kemas kini log bacaan',domain:'Peribadi',date:'2026-11-10'}
-];
-const sampleProjects = [
- {title:'Sistem Pengurusan Uthmani',domain:'Uthmani',progress:72,note:'Operasi kelas · Fasa 1'},
- {title:'Ruang Kerja Klinik Az-Zahra’',domain:'KPAZ',progress:48,note:'Papan pemuka pengurusan · Prototaip'},
- {title:'Silibus Sirah Interaktif',domain:'Peribadi',progress:34,note:'Kandungan pembelajaran · Draf'},
- {title:'Reka Bentuk KHUTTAH',domain:'Peribadi',progress:24,note:'Sistem reka bentuk · Semakan'}
-];
-const sampleNotes = [
- {title:'Panduan pengurusan kelas',domain:'Uthmani',kind:'Rujukan',note:'Jadual kelas, kehadiran dan rekod sumbangan.'},
- {title:'Nota sistem reka bentuk',domain:'Peribadi',kind:'Rujukan',note:'Palet Zinc, tipografi, jarak dan komponen antaramuka.'},
- {title:'Senarai semak mingguan',domain:'Peribadi',kind:'Rujukan',note:'Semak tugasan, janji temu dan keutamaan minggu hadapan.'},
- {title:'Garis masa pembelajaran sirah',domain:'Peribadi',kind:'Penyelidikan',note:'Susun urutan peristiwa untuk silibus interaktif.',tags:['Sirah']},
- {title:'Nota rujukan kurikulum',domain:'Peribadi',kind:'Penyelidikan',note:'Kumpulkan nota bacaan mengikut topik dan catat sumber berkaitan.'}
-];
-function sampleState() {
- return normaliseState(structuredClone({records:samples,domains:defaultDomains,projects:sampleProjects,notes:sampleNotes,tags:defaultTags,subfolders:[],groupLayoutVersion:1}));
+function emptyState() {
+ return normaliseState({records:[],domains:[...defaultDomains],projects:[],notes:[],tags:structuredClone(defaultTags),subfolders:[],groupLayoutVersion:1,demoCleanupVersion:1});
 }
 let storageOK = true;
 let needsGroupMigration = false;
-let {records,domains,projects,notes,tags,subfolders} = sampleState();
+let demoCleanupVersion = 1;
+let {records,domains,projects,notes,tags,subfolders} = emptyState();
 let rawSaved=null;
 try {
  rawSaved=localStorage.getItem(key);
@@ -87,19 +60,15 @@ try {
   const validated=normaliseState({...saved,tags:{...defaultTags,...saved.tags}});
   ({records,domains,projects,notes,tags,subfolders} = validated);
   needsGroupMigration=saved.groupLayoutVersion!==1;
+  demoCleanupVersion=saved.demoCleanupVersion===1?1:0;
  }
  if (Array.isArray(legacy)) {
-  const oldTitles = {"t1": "Review October class reports", "t2": "Check branch revenue summary", "t3": "Outline Sirah reading notes", "t4": "Review KHUTTAH navigation", "t5": "Plan next week’s priorities", "t6": "Prepare Dhuha contribution summary", "e1": "Operations check-in", "e2": "Review clinic dashboard", "e3": "Focused reading", "e4": "Design review", "e5": "Weekly planning", "r1": "Check November invoices", "r2": "Update reading log"};
-  const translatedRecords = legacy.map(item=>{
-   const sample=samples.find(entry=>entry.id===item.id);
-   const translated = sample && oldTitles[item.id]===item.title;
-   const legacyDomain=item.domain==="Az-Zahra'"?'KPAZ':item.domain;
-   const updated={...item,domain:defaultDomains.includes(legacyDomain)?legacyDomain:legacyDomain? 'Peribadi':''};
-   if (translated) updated.title=sample.title;
-   if (sample?.detail && item.detail==={"t1": "Review the class and attendance summaries for both branches.", "t2": "Review the combined summary for Pasir Tumboh and Ketereh."}[item.id]) updated.detail=sample.detail;
-   return updated;
+  demoCleanupVersion=0;
+  const legacyRecords=legacy.map(item=>{
+   const previous=item.domain==="Az-Zahra'"?'KPAZ':item.domain;
+   return {...item,domain:defaultDomains.includes(previous)?previous:previous?'Peribadi':''};
   });
-  ({records,domains,projects,notes,tags,subfolders}=normaliseState({...currentState(),records:translatedRecords}));
+  ({records,domains,projects,notes,tags,subfolders}=normaliseState({...currentState(),records:legacyRecords}));
  }
 } catch {
  storageOK=false;
@@ -118,6 +87,11 @@ function migrateGroupNames(state) {
  return state;
 }
 ({records,domains,projects,notes,tags,subfolders}=migrateGroupNames({...currentState(),groupLayoutVersion:needsGroupMigration?0:1}));
+const cleanedState=clearLegacyDemoData(currentState(),{draftKeys:drafts.keys()});
+if (demoCleanupVersion!==1&&rawSaved&&!recoverySource) {
+ try { if (!localStorage.getItem('khuttah-before-demo-cleanup-v1')) localStorage.setItem('khuttah-before-demo-cleanup-v1',rawSaved); } catch {}
+}
+({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=cleanedState);
 if (!recoverySource) {
  try { localStorage.setItem(key,JSON.stringify(currentState())); }
  catch { storageOK=false; }
@@ -143,7 +117,7 @@ const domainName = value => value || 'Tanpa kumpulan';
 const badge = label => '<span class="badge">'+html(label)+'</span>';
 const button = (label, attrs, symbol='',classes='') => '<button type="button" class="btn '+classes+'" '+attrs+'>'+(symbol?icon(symbol):'')+label+'</button>';
 const blank = text => '<p class="empty">'+text+'</p>';
-function currentState() { return {records,domains,projects,notes,tags,subfolders,groupLayoutVersion:1}; }
+function currentState() { return {records,domains,projects,notes,tags,subfolders,groupLayoutVersion:1,demoCleanupVersion}; }
 function notify(message,action=null) {
  $('toast').textContent=message;
  undoAction=action;
@@ -483,7 +457,7 @@ function settings() {
  const tabs={Domains:'Kumpulan',Projects:'Projek',General:'Umum'};
  const switches='<div class="segments settings-tabs" aria-label="Bahagian tetapan">'+Object.entries(tabs).map(([id,label])=>'<button data-settings="'+id+'" class="'+(settingsTab===id?'active':'')+'" aria-pressed="'+(settingsTab===id)+'">'+label+'</button>').join('')+'</div>';
  if (settingsTab==='Projects') return switches+projectPanel();
- if (settingsTab==='General') return switches+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam pelayar ini. Eksport sandaran untuk berpindah pelayar, peranti atau alamat web.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>')+'<div class="group-notes">'+section('Data contoh','<div class="detail"><p class="muted">Pulihkan rekod contoh bertarikh November 2026. Data semasa dan draf akan digantikan.</p><p>'+button('Pulihkan data contoh','data-reset')+'</p></div>')+'</div>';
+ if (settingsTab==='General') return switches+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam pelayar ini. Eksport sandaran untuk berpindah pelayar, peranti atau alamat web.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
  return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
 }
@@ -516,7 +490,7 @@ function importDialog() {
   $('import-preview').textContent='Menyemak fail…';
   try {
    if (file.size>MAX_BACKUP_BYTES) throw new Error('Saiz maksimum sandaran ialah 10 MB.');
-   const candidate=migrateGroupNames(parseBackup(await file.text()));
+   const candidate=clearLegacyDemoData(migrateGroupNames(parseBackup(await file.text())));
    if (form.elements.file.files[0]!==file||!form.isConnected) return;
    incoming=candidate;
    $('import-preview').textContent=candidate.records.length+' rekod · '+candidate.notes.length+' nota · '+candidate.domains.length+' kumpulan';
@@ -532,7 +506,7 @@ function importDialog() {
   if (!incoming) return;
   try { localStorage.setItem(key,JSON.stringify(incoming)); }
   catch { $('import-error').textContent='Storan pelayar tidak dapat ditulis. Data semasa belum diganti.'; return; }
-  ({records,domains,projects,notes,tags,subfolders}=incoming);
+  ({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=incoming);
   recoverySource=null;
   drafts.clearAll();
   selectedSubfolder='';
@@ -750,8 +724,6 @@ document.addEventListener('click',e=>{
   noteForm(item.thesis||(item.kind==='Nota peribadi'?'Notes':'Knowledge'),index);
   return;
  }
- if ('reset' in data){ openDialog('Pulihkan data contoh?','<div class="dialog-body"><p>Tugasan, acara, peringatan, nota, kumpulan, subfolder dan tag akan dikembalikan kepada data contoh.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Pulihkan data','data-confirm-reset','','primary')+'</div></div>'); return; }
- if ('confirmReset' in data){ ({records,domains,projects,notes,tags,subfolders}=sampleState()); drafts.clearAll(); recoverySource=null; selectedSubfolder=''; selectedChapter.Master=1; selectedChapter.PhD=1; for (const scope of Object.keys(tagSelection)) tagSelection[scope]=''; domain=''; $('modal').close(); save('Data contoh dipulihkan'); }
 });
 document.addEventListener('change',e=>{
  const control=e.target;

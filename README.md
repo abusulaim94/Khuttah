@@ -4,6 +4,8 @@ Tugasan, acara, deadline, bacaan, nota dan penyelidikan dalam satu ruang kerja. 
 
 Versi ini menggunakan JavaScript dan CSS dengan Vite untuk pembangunan serta build. Data dan draf disimpan dalam pelayar. Log masuk, pangkalan data awan dan penyelarasan antara peranti belum dilaksanakan.
 
+Pemasangan baharu bermula tanpa tugasan, acara, peringatan, projek, nota atau tag contoh. Kumpulan Peribadi, Uthmani dan KPAZ dikekalkan sebagai struktur awal. Data demo lama yang masih asal dibersihkan sekali; rekod yang telah diubah, data ciptaan pengguna dan rekod yang mempunyai draf dikekalkan. Salinan data tersimpan sebelum pembersihan dikekalkan dalam pelayar apabila ruang storan membenarkan.
+
 **Mula di komputer ini**
 
 Gunakan Node.js 24. Buka terminal PowerShell dalam folder projek:
@@ -55,7 +57,9 @@ src/app.js                     Antaramuka dan aliran aplikasi
 src/styles.css                 Reka bentuk dan paparan responsif
 src/storage.js                 Format, pengesahan dan sandaran data
 src/drafts.js                  Penyimpanan serta pemulihan draf borang
+src/cleanup.js                 Pembersihan sekali bagi data demo lama
 tests/storage.test.js          Ujian sandaran, data lama dan data tidak sah
+tests/cleanup.test.js          Ujian pembersihan demo dan perlindungan data pengguna
 public/favicon.svg            Ikon aplikasi
 .github/workflows/check.yml   Ujian dan build melalui GitHub Actions
 KHUTTAH_Prototype.html         Prototaip lama dan alat eksport data

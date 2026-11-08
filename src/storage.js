@@ -66,6 +66,7 @@ export function normaliseState(value) {
       return {...entry, folder: text(entry.folder, 'kumpulan subfolder', 45), name: text(entry.name, 'nama subfolder', 48)};
     }),
     groupLayoutVersion: value.groupLayoutVersion === 1 ? 1 : 0,
+    demoCleanupVersion: value.demoCleanupVersion === 1 ? 1 : 0,
   };
 }
 

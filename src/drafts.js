@@ -85,5 +85,5 @@ export function createDraftController() {
     form.addEventListener('input', () => { if (active?.form === form) capture(); });
     form.addEventListener('change', () => { if (active?.form === form) capture(); });
   }
-  return {attach, capture, clear, detach, clearAll};
+  return {attach, capture, clear, detach, clearAll, keys: () => Object.keys(entries)};
 }
