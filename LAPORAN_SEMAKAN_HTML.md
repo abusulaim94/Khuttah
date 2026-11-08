@@ -1,5 +1,7 @@
 **Laporan semakan KHUTTAH_Prototype.html**
 
+Nota: Laporan ini ialah rekod semakan versi awal sebelum penambahan Tunda, susunan menu baharu dan penyediaan web app. Rujukan baris merujuk versi yang disemak ketika itu. Status versi semasa diterangkan dalam README.md.
+
 Tarikh: 7 November 2026 · Fail: 60,873 bait, 704 baris · Semakan kod dan ujian Chrome tanpa tetingkap dengan profil ujian berasingan.
 
 Fungsi asas prototaip berjalan dalam ujian. Lima isu yang boleh dihasilkan semula ditemui, melibatkan kehilangan draf, skop pemadaman acara berulang, pemulihan data tersimpan, fokus papan kekunci dan paparan nama folder panjang. Perlindungan draf dan penjelasan pemadaman siri wajar diberi keutamaan sebelum digunakan untuk catatan harian.

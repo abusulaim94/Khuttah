@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="ms">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1,viewport-fit=cover">
+<title>KHUTTAH · Ruang kerja peribadi</title>
+<meta name="description" content="Ruang kerja peribadi untuk tugasan, acara, deadline, nota dan penyelidikan.">
+<meta name="theme-color" content="#18181b">
+<link rel="icon" type="image/svg+xml" href="./favicon.svg">
+<link rel="stylesheet" href="./src/styles.css">
+</head>
+<body>
+<div class="layout">
+<aside class="sidebar" id="sidebar" aria-label="Bar sisi"></aside>
+<div>
+<header class="top"><div class="crumb"><span class="muted">Ruang kerja</span><span class="muted">/</span><strong id="crumb"></strong></div><div class="actions" id="actions"></div></header>
+<main class="content" id="main"></main>
+</div>
+</div>
+<nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi bawah"></nav>
+<dialog id="modal" aria-labelledby="modal-title"></dialog><div class="toast" id="toast" role="status"></div>
+<script type="module" src="./src/app.js"></script>
+</body>
+</html>

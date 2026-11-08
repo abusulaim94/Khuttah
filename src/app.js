@@ -1,0 +1,804 @@
+import {normaliseState, createBackup, parseBackup, MAX_BACKUP_BYTES} from './storage.js';
+import {createDraftController} from './drafts.js';
+
+const drafts=createDraftController();
+let undoAction=null;
+let recoverySource=null;
+const paths = {
+ note:'<path d="M5 3h14v13l-5 5H5zM14 21v-5h5M8 8h8M8 12h8"/>',
+ logo:'<path d="M5 4v16M19 4 5 14m6-4 8 10"/>', home:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
+ calendar:'<rect x="3" y="5" width="18" height="16" rx="2"/><path d="M16 3v4M8 3v4M3 10h18"/>', task:'<rect x="4" y="4" width="16" height="16" rx="2"/><path d="m8 12 3 3 5-6"/>', project:'<path d="M3 7a2 2 0 0 1 2-2h4l2 2h8a2 2 0 0 1 2 2v9a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2z"/>',
+ book:'<path d="M12 6c-3-2-6-2-9-1v14c3-1 6-1 9 1 3-2 6-2 9-1V5c-3-1-6-1-9 1v14"/>', research:'<path d="M9 3h6m-5 0v7l-6 8a2 2 0 0 0 2 3h12a2 2 0 0 0 2-3l-6-8V3M7 15h10"/>', bell:'<path d="M18 8a6 6 0 0 0-12 0c0 6-3 6-3 8h18c0-2-3-2-3-8m-8 12a2 2 0 0 0 4 0"/>', settings:'<circle cx="12" cy="12" r="3"/><path d="m10 3-.7 2.3-2 .9L5 5 3 8l1.7 1.7v2.6L3 14l2 3 2.3-.8 2 .9.7 2.9h4l.7-2.9 2-.9 2.3.8 2-3-1.7-1.7V9.7L21 8l-2-3-2.3 1.2-2-.9L14 3z"/>',
+ plus:'<path d="M12 5v14M5 12h14"/>', search:'<circle cx="10.5" cy="10.5" r="6.5"/><path d="m16 16 4 4"/>', arrow:'<path d="M5 12h14m-6-6 6 6-6 6"/>', prev:'<path d="m15 6-6 6 6 6"/>', next:'<path d="m9 6 6 6-6 6"/>', close:'<path d="m6 6 12 12M18 6 6 18"/>', menu:'<path d="M4 6h16M4 12h16M4 18h16"/>'
+};
+const icon = name => '<svg viewBox="0 0 24 24" aria-hidden="true">'+paths[name]+'</svg>';
+const modules = {
+ Overview:['Ringkasan','home','Tugasan dan jadual anda dalam satu paparan.'],
+ Planner:['Perancang','calendar','Atur tugasan, acara dan tarikh akhir penting.'],
+ Events:['Acara','calendar','Susun acara dan tapis senarai mengikut tag.'],
+ Tasks:['Tugasan','task','Semak tugasan yang belum selesai dan yang telah disiapkan.'],
+ Reminders:['Peringatan','bell','Pantau tarikh akhir penting dan deadline anda.'],
+ Knowledge:['Bacaan & Kajian','book','Himpunan rujukan dan nota penyelidikan.'],
+ Notes:['Nota','note','Tulis catatan panjang dan susun mengikut tag.'],
+ Master:['Master','book','Susun nota tesis Master mengikut bab.'],
+ PhD:['PhD','book','Susun nota tesis PhD mengikut bab.'],
+ Settings:['Tetapan','settings','Urus kumpulan, sandaran dan tetapan ruang kerja.'],
+ Group:['Kumpulan','project','Tugasan, acara, peringatan dan nota kumpulan anda.']
+};
+const primaryPages = ['Overview','Planner','Events','Tasks','Reminders'];
+const secondaryPages = ['Knowledge','Notes','Master','PhD'];
+const defaultTags = {Notes:[],Knowledge:['Tajwid','Sirah','Ulum Quran','Lain-lain'],Events:['Kuliah mingguan','Kuliah jemputan','Majlis kahwin','Lain-lain']};
+const tagSelection = {Notes:'',Events:'',Knowledge:''};
+const chapterNames=['Pengenalan','Sorotan Literatur','Metodologi','Dapatan','Perbincangan dan Kesimpulan'];
+const selectedChapter={Master:1,PhD:1};
+let selectedSubfolder='';
+const isThesis=scope=>Object.hasOwn(selectedChapter,scope);
+const defaultDomains = ['Peribadi','Uthmani','KPAZ'];
+const priorities={high:'Penting',low:'Kurang penting',normal:'Biasa'};
+const taskPriority=item=>Object.hasOwn(priorities,item.priority)?item.priority:'normal';
+const types = {task:'Tugasan',event:'Acara',reminder:'Peringatan'};
+const recordDateLabels={task:'Tarikh tugasan',event:'Tarikh acara',reminder:'Tarikh akhir'};
+const views = {Month:'Bulan',Week:'Minggu',Day:'Hari'};
+const statuses = {Open:'Belum selesai',Completed:'Selesai',All:'Semua'};
+const demoDate = '2026-11-05';
+const today = new Intl.DateTimeFormat('en-CA',{year:'numeric',month:'2-digit',day:'2-digit',timeZone:'Asia/Kuala_Lumpur'}).format(new Date());
+const periods = {today:'Hari ini',week:'Minggu ini',next:'Minggu depan',month:'Bulan ini'};
+const key = 'khuttah-prototype-v2';
+const samples = [
+ {id:'t1',type:'task',priority:'high',title:'Semak laporan kelas Oktober',domain:'Uthmani',date:demoDate,detail:'Semak ringkasan kelas dan kehadiran bagi kedua-dua cawangan.'},
+ {id:'t2',type:'task',priority:'low',title:'Semak ringkasan hasil cawangan',domain:'KPAZ',date:demoDate,detail:'Semak ringkasan gabungan Pasir Tumboh dan Ketereh.'},
+ {id:'t3',type:'task',title:'Rangka nota bacaan sirah',domain:'Peribadi',date:demoDate},
+ {id:'t4',type:'task',title:'Semak navigasi KHUTTAH',domain:'Peribadi',date:'2026-11-06'},
+ {id:'t5',type:'task',title:'Rancang keutamaan minggu hadapan',domain:'Peribadi',date:'2026-11-08',done:true},
+ {id:'t6',type:'task',title:'Sediakan ringkasan sumbangan Kuliah Dhuha',domain:'Uthmani',date:'2026-11-10'},
+ {id:'e1',type:'event',title:'Semakan operasi',domain:'Uthmani',date:demoDate,time:'09:00',repeat:'weekly'},
+ {id:'e2',type:'event',title:'Semak papan pemuka klinik',domain:'KPAZ',date:demoDate,time:'14:00'},
+ {id:'e3',type:'event',title:'Sesi bacaan',domain:'Peribadi',date:demoDate,time:'20:30'},
+ {id:'e4',type:'event',title:'Semakan reka bentuk',domain:'Peribadi',date:'2026-11-09',time:'10:00'},
+ {id:'e5',type:'event',title:'Perancangan mingguan',domain:'Peribadi',date:'2026-11-08',time:'21:00',repeat:'weekly'},
+ {id:'r1',type:'reminder',title:'Semak invois November',domain:'Uthmani',date:'2026-11-08'},
+ {id:'r2',type:'reminder',title:'Kemas kini log bacaan',domain:'Peribadi',date:'2026-11-10'}
+];
+const sampleProjects = [
+ {title:'Sistem Pengurusan Uthmani',domain:'Uthmani',progress:72,note:'Operasi kelas · Fasa 1'},
+ {title:'Ruang Kerja Klinik Az-Zahra’',domain:'KPAZ',progress:48,note:'Papan pemuka pengurusan · Prototaip'},
+ {title:'Silibus Sirah Interaktif',domain:'Peribadi',progress:34,note:'Kandungan pembelajaran · Draf'},
+ {title:'Reka Bentuk KHUTTAH',domain:'Peribadi',progress:24,note:'Sistem reka bentuk · Semakan'}
+];
+const sampleNotes = [
+ {title:'Panduan pengurusan kelas',domain:'Uthmani',kind:'Rujukan',note:'Jadual kelas, kehadiran dan rekod sumbangan.'},
+ {title:'Nota sistem reka bentuk',domain:'Peribadi',kind:'Rujukan',note:'Palet Zinc, tipografi, jarak dan komponen antaramuka.'},
+ {title:'Senarai semak mingguan',domain:'Peribadi',kind:'Rujukan',note:'Semak tugasan, janji temu dan keutamaan minggu hadapan.'},
+ {title:'Garis masa pembelajaran sirah',domain:'Peribadi',kind:'Penyelidikan',note:'Susun urutan peristiwa untuk silibus interaktif.',tags:['Sirah']},
+ {title:'Nota rujukan kurikulum',domain:'Peribadi',kind:'Penyelidikan',note:'Kumpulkan nota bacaan mengikut topik dan catat sumber berkaitan.'}
+];
+function sampleState() {
+ return normaliseState(structuredClone({records:samples,domains:defaultDomains,projects:sampleProjects,notes:sampleNotes,tags:defaultTags,subfolders:[],groupLayoutVersion:1}));
+}
+let storageOK = true;
+let needsGroupMigration = false;
+let {records,domains,projects,notes,tags,subfolders} = sampleState();
+let rawSaved=null;
+try {
+ rawSaved=localStorage.getItem(key);
+ const saved = JSON.parse(rawSaved ?? 'null');
+ const legacy = saved ? null : JSON.parse(localStorage.getItem('khuttah-prototype-v1') ?? 'null');
+ if (saved) {
+  const validated=normaliseState({...saved,tags:{...defaultTags,...saved.tags}});
+  ({records,domains,projects,notes,tags,subfolders} = validated);
+  needsGroupMigration=saved.groupLayoutVersion!==1;
+ }
+ if (Array.isArray(legacy)) {
+  const oldTitles = {"t1": "Review October class reports", "t2": "Check branch revenue summary", "t3": "Outline Sirah reading notes", "t4": "Review KHUTTAH navigation", "t5": "Plan next week’s priorities", "t6": "Prepare Dhuha contribution summary", "e1": "Operations check-in", "e2": "Review clinic dashboard", "e3": "Focused reading", "e4": "Design review", "e5": "Weekly planning", "r1": "Check November invoices", "r2": "Update reading log"};
+  const translatedRecords = legacy.map(item=>{
+   const sample=samples.find(entry=>entry.id===item.id);
+   const translated = sample && oldTitles[item.id]===item.title;
+   const legacyDomain=item.domain==="Az-Zahra'"?'KPAZ':item.domain;
+   const updated={...item,domain:defaultDomains.includes(legacyDomain)?legacyDomain:legacyDomain? 'Peribadi':''};
+   if (translated) updated.title=sample.title;
+   if (sample?.detail && item.detail==={"t1": "Review the class and attendance summaries for both branches.", "t2": "Review the combined summary for Pasir Tumboh and Ketereh."}[item.id]) updated.detail=sample.detail;
+   return updated;
+  });
+  ({records,domains,projects,notes,tags,subfolders}=normaliseState({...currentState(),records:translatedRecords}));
+ }
+} catch {
+ storageOK=false;
+ recoverySource=rawSaved;
+}
+// Preserve existing entries when adopting the new group name and order.
+const groupName=name=>name==="Az-Zahra'"?'KPAZ':name;
+function migrateGroupNames(state) {
+ if (state.groupLayoutVersion===1) return state;
+ const renamed=[...new Set(state.domains.map(groupName))];
+ state.domains=[...defaultDomains.filter(name=>renamed.includes(name)),...renamed.filter(name=>!defaultDomains.includes(name))];
+ for (const item of [...state.records,...state.projects,...state.notes]) item.domain=groupName(item.domain);
+ for (const item of state.subfolders) item.folder=groupName(item.folder);
+ state.subfolders=state.subfolders.filter((item,index,list)=>list.findIndex(other=>other.folder===item.folder&&other.name===item.name)===index);
+ state.groupLayoutVersion=1;
+ return state;
+}
+({records,domains,projects,notes,tags,subfolders}=migrateGroupNames({...currentState(),groupLayoutVersion:needsGroupMigration?0:1}));
+if (!recoverySource) {
+ try { localStorage.setItem(key,JSON.stringify(currentState())); }
+ catch { storageOK=false; }
+}
+let page='Overview', domain='', view='Month', focus=today, period='week', taskFilter='Open', settingsTab='Domains', toastTimer;
+const $ = id => document.getElementById(id);
+const html = value => String(value ?? '').replace(/[&<>"']/g, char=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[char]));
+const dateOf = iso => new Date(iso+'T12:00:00Z');
+const isoOf = date => date.toISOString().slice(0,10);
+const add = (iso,n) => { const date=dateOf(iso); date.setUTCDate(date.getUTCDate()+n); return isoOf(date); };
+const weekStart = iso => add(iso,-dateOf(iso).getUTCDay());
+const monthStart = iso => iso.slice(0,7)+'-01';
+function monthEnd(iso) {
+ const date=dateOf(monthStart(iso));
+ date.setUTCMonth(date.getUTCMonth()+1,0);
+ return isoOf(date);
+}
+const dateLabel = (iso,options) => new Intl.DateTimeFormat('ms-MY',{...options,timeZone:'UTC'}).format(dateOf(iso));
+const shortDate = iso => dateLabel(iso,{day:'numeric',month:'short'});
+const fullDate = iso => dateLabel(iso,{weekday:'long',day:'numeric',month:'long',year:'numeric'});
+const visible = entries => entries.filter(item=>!domain||item.domain===domain);
+const domainName = value => value || 'Tanpa kumpulan';
+const badge = label => '<span class="badge">'+html(label)+'</span>';
+const button = (label, attrs, symbol='',classes='') => '<button type="button" class="btn '+classes+'" '+attrs+'>'+(symbol?icon(symbol):'')+label+'</button>';
+const blank = text => '<p class="empty">'+text+'</p>';
+function currentState() { return {records,domains,projects,notes,tags,subfolders,groupLayoutVersion:1}; }
+function notify(message,action=null) {
+ $('toast').textContent=message;
+ undoAction=action;
+ if (action) $('toast').insertAdjacentHTML('beforeend',button('Buat asal','data-undo','','ghost'));
+ clearTimeout(toastTimer);
+ toastTimer=setTimeout(()=>{ $('toast').textContent=''; undoAction=null; },action?12000:4000);
+}
+function save(message,action=null) {
+ try {
+  if (recoverySource) throw new Error('Data asal menunggu pemulihan.');
+  localStorage.setItem(key,JSON.stringify(currentState()));
+  storageOK=true;
+ }
+ catch { storageOK=false; }
+ render();
+ notify(message+(storageOK?'':' · Perubahan tersedia dalam sesi ini sahaja.'),action);
+}
+function showPage(nextPage) {
+ page=nextPage;
+ render();
+ window.scrollTo(0,0);
+ $('main').querySelector('h1').focus({preventScroll:true});
+}
+function pageLinks(names,inDialog=false) {
+ return names.map(name=>{
+  const [label,symbol]=modules[name];
+  const current=page===name;
+  return '<button type="button" data-page="'+name+'"'+(inDialog?' data-from-more class="btn'+(current?' active':'')+'"':current?' class="active"':'')+(current?' aria-current="page"':'')+'>'+icon(symbol)+html(label)+'</button>';
+ }).join('');
+}
+function profileBlock(inDialog=false) {
+ return '<div class="person"><span class="avatar" aria-hidden="true">AS</span><div class="profile-info"><strong class="small">Abu Sulaim</strong><div class="muted small">Akaun peribadi</div></div>'+button('','data-page="Settings" data-profile-settings aria-label="Tetapan" title="Tetapan"'+(inDialog?' data-from-more':'')+(page==='Settings'?' aria-current="page"':''),'settings','icon ghost profile-settings'+(page==='Settings'?' active':''))+'</div>';
+}
+function bottomNavigation() {
+ const links=primaryPages.map(name=>{
+  const [label,symbol]=modules[name];
+  return '<button data-page="'+name+'"'+(page===name?' class="active" aria-current="page"':'')+'>'+icon(symbol)+label+'</button>';
+ }).join('');
+ const more='<button id="more-menu" type="button" aria-haspopup="dialog" aria-label="Lagi: Ilmu dan Pengetahuan, Kumpulan dan profil"'+(primaryPages.includes(page)?'':' class="active" aria-current="true"')+'>'+icon('menu')+'Lagi</button>';
+ return '<div class="bottom-links">'+links+more+'</div>';
+}
+function moreNavigation() {
+ openDialog('Lagi','<div class="dialog-body more-nav"><h3 class="eyebrow">Ilmu dan Pengetahuan</h3><nav class="more-nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages,true)+'</nav><h3 class="eyebrow">Kumpulan</h3><nav class="more-nav" aria-label="Kumpulan">'+domainLinks(true)+'</nav>'+profileBlock(true)+'</div>');
+}
+function domainLinks(inDialog=false) {
+ return ['',...domains].map((name,index)=>{
+  const active=domain===name;
+  const attrs='data-scope="'+index+'" aria-pressed="'+active+'"'+(inDialog?' data-from-more':'');
+  const label=html(name||'Semua kumpulan');
+  return inDialog?button(label,attrs,'project',active?'active':''):'<button '+attrs+(active?' class="active"':'')+'>'+icon('project')+label+'</button>';
+ }).join('');
+}
+function render() {
+ $('bottom-nav').innerHTML=bottomNavigation();
+ $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
+ const [moduleTitle,,subtitle]=modules[page];
+ const title=page==='Group'?domain:moduleTitle;
+ $('crumb').textContent=title;
+ $('actions').innerHTML=button('<span class="search-label">Cari</span> <kbd>Ctrl K</kbd>','data-search aria-label="Cari dalam ruang kerja"','search','ghost')+(page==='Settings'?'':(page==='Notes'||page==='Knowledge'||isThesis(page))?button('<span class="new-label">'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'</span>','data-add-note="'+page+'" aria-label="'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'"','plus','primary'):button('<span class="new-label">Tambah</span>','data-new="'+((page==='Planner'||page==='Events')?'event':page==='Reminders'?'reminder':'task')+'" aria-label="Tambah rekod"','plus','primary'));
+ const filter='<select class="filter scope-select" id="domain-select" aria-label="Tapis mengikut kumpulan">'+selectDomain(domain,'Semua kumpulan')+'</select>';
+ const recovery=recoverySource?'<div class="storage-notice" role="alert"><p>Data tersimpan tidak dapat dibaca. Salinan asal masih dikekalkan; perubahan baharu tersedia dalam sesi ini sahaja.</p>'+button('Muat turun data asal','data-export-recovery')+button('Import sandaran','data-import')+'</div>':'';
+ $('main').innerHTML=recovery+'<div class="page-head"><div>'+(page==='Overview'?'<p class="eyebrow">'+html(fullDate(today))+'</p>':'')+'<h1 tabindex="-1">'+html(title)+'</h1><p class="muted">'+subtitle+'</p></div>'+(page==='Settings'||isThesis(page)?'':filter)+'</div>'+({Overview:overview,Planner:planner,Events:eventsPage,Tasks:tasks,Knowledge:knowledge,Reminders:reminders,Notes:personalNotes,Master:thesisPage,PhD:thesisPage,Settings:settings,Group:groupPage}[page])();
+}
+function section(title, content, action='') {
+ return '<section class="panel"><div class="section-head"><h2>'+title+'</h2>'+action+'</div>'+content+'</section>';
+}
+function priorityMarker(item,compact=false) {
+ if (item.type!=='task') return '';
+ const level=taskPriority(item);
+ const label=priorities[level];
+ const dot='<span class="priority-dot '+level+'" aria-hidden="true"></span>';
+ return compact?dot:'<span class="priority">'+dot+label+'</span>';
+}
+function taskRows(items, emptyText='Tiada tugasan untuk dipaparkan.') {
+ if (!items.length) return blank(emptyText);
+ return '<div class="rows">'+items.map(item=>'<div class="row'+(item.done?' done':'')+'"><input class="check" type="checkbox" data-check="'+item.id+'" aria-label="'+(item.done?'Buka semula ':'Tandakan selesai ')+html(item.title)+'" '+(item.done?'checked':'')+'><div class="row-main"><button class="row-title" data-edit="'+item.id+'">'+html(item.title)+'</button><div class="small muted">'+html(domainName(item.domain))+' · '+(item.type==='reminder'?'Deadline · ':'')+(item.date===today?'Hari ini':shortDate(item.date))+priorityMarker(item)+'</div>'+deadlineStatus(item)+'</div>'+(item.type==='task'&&!item.done?button('Tunda','data-postpone="'+html(item.id)+'" aria-label="Tunda '+html(item.title)+'"','','postpone-button'):'')+'</div>').join('')+'</div>';
+}
+function deadlineStatus(item) {
+ if (item.type!=='reminder'||item.done) return '';
+ const days=Math.round((dateOf(item.date)-dateOf(today))/86400000);
+ const label=days<0?'Lewat '+Math.abs(days)+' hari':days===0?'Tarikh akhir hari ini':days===1?'Tarikh akhir esok':days+' hari lagi';
+ return '<span class="deadline-status'+(days<0?' overdue':'')+'">'+label+'</span>';
+}
+function postponeForm(id) {
+ const item=records.find(entry=>entry.id===id&&entry.type==='task'&&!entry.done);
+ if (!item) return;
+ if (item.date>='9999-12-31') { notify('Tarikh tugasan sudah mencapai had kalendar.'); return; }
+ const earliest=add(item.date>today?item.date:today,1);
+ const choices=[['Esok',add(today,1)],['Minggu depan',add(today,7)]];
+ const options=choices.map(([label,date])=>button('<strong>'+label+'</strong><span class="small">'+shortDate(date)+'</span>','data-postpone-date="'+date+'"'+(date<=item.date?' disabled':''))).join('');
+ openDialog('Tunda tugasan','<form id="postpone-form" class="dialog-body"><div><p><strong>'+html(item.title)+'</strong></p><p class="small muted">Tarikh sekarang: '+fullDate(item.date)+'</p></div><div class="postpone-options" role="group" aria-label="Pilihan tarikh tunda">'+options+'</div><label>Atau pilih tarikh baharu<input type="date" name="date" min="'+earliest+'" max="9999-12-31" value="'+earliest+'" required></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Tunda tugasan</button></div></form>');
+ const form=$('postpone-form');
+ form.addEventListener('click',event=>{
+  const choice=event.target.closest('[data-postpone-date]');
+  if (!choice) return;
+  form.elements.date.value=choice.dataset.postponeDate;
+  form.requestSubmit();
+ });
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  const date=form.elements.date.value;
+  if (date<earliest||date>'9999-12-31') { form.elements.date.reportValidity(); return; }
+  item.date=date;
+  $('modal').close();
+  save('Tugasan ditunda ke '+shortDate(date));
+  (document.querySelector('[data-postpone="'+item.id+'"]')||$('main').querySelector('h1')).focus({preventScroll:true});
+ });
+}
+function scheduleRows(items, emptyText='Tiada acara dijadualkan.') {
+ if (!items.length) return blank(emptyText);
+ return '<div class="rows">'+items.map(item=>'<div class="row"><span class="time">'+html(item.time|| (item.type==='task'?'Tarikh akhir':'Sepanjang hari'))+'</span><div class="row-main time-mark"><button class="row-title" data-edit="'+item.id+'">'+html(item.title)+'</button><div class="small muted">'+html(domainName(item.domain))+' · '+shortDate(item.date)+(item.repeat?' · Berulang setiap minggu':'')+'</div>'+tagBadges(item)+'</div></div>').join('')+'</div>';
+}
+function projectPanel() {
+ const list=projects.length?'<div class="project-grid">'+projects.map((item,index)=>'<button class="project" data-project="'+index+'"><div class="inline">'+badge(domainName(item.domain))+'<span class="small muted">'+item.progress+'%</span></div><h3>'+html(item.title)+'</h3><p class="small muted">'+html(item.note)+'</p><div class="progress" role="progressbar" aria-label="'+html(item.title)+'" aria-valuenow="'+item.progress+'" aria-valuemin="0" aria-valuemax="100"><span style="width:'+item.progress+'%"></span></div></button>').join('')+'</div>':blank('Tiada projek.');
+ return section('Senarai projek',list);
+}
+function scheduledOn(day,types) {
+ return visible(records).filter(item=>types.includes(item.type)&&(item.date===day||(item.repeat==='weekly'&&day>item.date&&dateOf(day).getUTCDay()===dateOf(item.date).getUTCDay())))
+  .sort((a,b)=>Number(b.type==='reminder')-Number(a.type==='reminder')||(a.time||'').localeCompare(b.time||'')||a.title.localeCompare(b.title));
+}
+function itemsInRange(start,end,types) {
+ const result=[];
+ for (let day=start;day<=end;day=add(day,1)) {
+  for (const item of scheduledOn(day,types)) result.push({...item,date:day});
+ }
+ return result;
+}
+function rangeLabel(start,end) {
+ return start===end?fullDate(start):shortDate(start)+' – '+dateLabel(end,{day:'numeric',month:'short',year:'numeric'});
+}
+function overview() {
+ const sunday=weekStart(today);
+ const ranges={today:[today,today],week:[sunday,add(sunday,6)],next:[add(sunday,7),add(sunday,13)],month:[monthStart(today),monthEnd(today)]};
+ const [start,end]=ranges[period];
+ const items=itemsInRange(start,end,['task','event','reminder']);
+ const groups=[
+  {label:'Tugasan',type:'task',target:'Tasks',symbol:'task'},
+  {label:'Acara',type:'event',target:'Events',symbol:'calendar'},
+  {label:'Peringatan',type:'reminder',target:'Reminders',symbol:'bell'}
+ ];
+ const tabs='<div class="segments" aria-label="Tempoh ringkasan">'+Object.entries(periods).map(([id,label])=>'<button data-period="'+id+'" class="'+(period===id?'active':'')+'" aria-pressed="'+(period===id)+'">'+label+'</button>').join('')+'</div>';
+ const metrics=groups.map(({label,type,target,symbol})=>'<button class="metric" data-page="'+target+'"><div class="metric-top">'+label+icon(symbol)+'</div><strong>'+items.filter(item=>item.type===type).length+'</strong></button>').join('');
+ const lists=groups.map(({label,type})=>{
+  const entries=items.filter(item=>item.type===type);
+  return section(label,type==='event'?scheduleRows(entries,'Tiada acara dalam tempoh ini.'):taskRows(entries,type==='task'?'Tiada tugasan dalam tempoh ini.':'Tiada peringatan dalam tempoh ini.'));
+ }).join('');
+ const deadlines=visible(records).filter(item=>item.type==='reminder'&&!item.done&&item.date<=add(today,7)).sort((a,b)=>a.date.localeCompare(b.date));
+ const upcoming='<div class="deadline-preview">'+section('Deadline terdekat',taskRows(deadlines.slice(0,5),'Tiada deadline tertunggak atau dalam tujuh hari akan datang.'),button('Semua peringatan','data-page="Reminders"'))+'<p class="small muted">Deadline tertunggak dan tujuh hari akan datang'+(deadlines.length>5?' · '+deadlines.length+' keseluruhan':'')+'.</p></div>';
+ return upcoming+'<div class="period-bar">'+tabs+'<span class="small muted">'+rangeLabel(start,end)+'</span></div><div class="metrics">'+metrics+'</div><div class="overview-lists">'+lists+'</div>';
+}
+function groupPage() {
+ const items=visible(records);
+ const tasksList=items.filter(item=>item.type==='task'&&!item.done).sort((a,b)=>a.date.localeCompare(b.date));
+ const remindersList=items.filter(item=>item.type==='reminder'&&!item.done).sort((a,b)=>a.date.localeCompare(b.date));
+ const eventsList=itemsInRange(today,add(today,30),['event']);
+ const groupNotes=visible(notes);
+ const counts=[['Tugasan',tasksList.length,'Tasks'],['Acara · 30 hari',eventsList.length,'Events'],['Peringatan',remindersList.length,'Reminders']].map(([label,count,target])=>'<button class="metric" data-page="'+target+'"><span class="metric-top">'+label+'</span><strong>'+count+'</strong></button>').join('');
+ const rows=groupNotes.map(item=>'<div class="row"><div class="row-main"><button class="row-title" data-note="'+notes.indexOf(item)+'">'+html(item.title)+'</button><p class="small muted">'+html(item.kind+(item.subfolder?' · '+item.subfolder:''))+'</p>'+tagBadges(item)+'</div></div>').join('');
+ return '<div class="metrics">'+counts+'</div><div class="overview-lists">'+section('Tugasan',taskRows(tasksList),button('Tambah','data-new="task"','plus'))+section('Acara · 30 hari',scheduleRows(eventsList),button('Tambah','data-new="event"','plus'))+section('Peringatan',taskRows(remindersList,'Tiada deadline belum selesai.'),button('Tambah','data-new="reminder"','plus'))+'</div><div class="group-notes">'+section('Nota dan rujukan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada nota dalam kumpulan ini.'),button('Tambah nota','data-add-note="Notes"','plus'))+'</div>';
+}
+function selectDomain(current, emptyLabel) {
+ return '<option value="">'+emptyLabel+'</option>'+domains.map(name=>'<option value="'+html(name)+'" '+(name===current?'selected':'')+'>'+html(name)+'</option>').join('');
+}
+function planner() {
+ const first=monthStart(focus);
+ const start=view==='Month'?weekStart(first):weekStart(focus);
+ const lastMonthDay=monthEnd(focus);
+ const count=view==='Month'?Math.ceil(((dateOf(lastMonthDay)-dateOf(start))/86400000+1)/7)*7:7;
+ const heading=view==='Month'?dateLabel(focus,{month:'long',year:'numeric'}):view==='Week'?rangeLabel(start,add(start,6)):fullDate(focus);
+ const switches='<div class="segments" aria-label="Paparan kalendar">'+Object.entries(views).map(([name,label])=>'<button data-view="'+name+'" aria-pressed="'+(name===view)+'" class="'+(name===view?'active':'')+'">'+label+'</button>').join('')+'</div>';
+ const nav='<div class="toolbar"><div class="inline">'+button('','data-step="-1" aria-label="Sebelumnya: '+views[view]+'"','prev','icon')+button('','data-step="1" aria-label="Seterusnya: '+views[view]+'"','next','icon')+button('Hari ini','data-today')+'<h2>'+heading+'</h2></div><div class="inline">'+switches+'</div></div>';
+ const [agendaStart,agendaEnd]=view==='Month'?[first,lastMonthDay]:view==='Week'?[start,add(start,6)]:[focus,focus];
+ const items=itemsInRange(agendaStart,agendaEnd,['task','event','reminder']);
+ const agenda='<div class="agenda-heading"><h2>Agenda perancang</h2><span class="small muted">'+rangeLabel(agendaStart,agendaEnd)+'</span></div><div class="planner-lists">'+section('Tugasan',taskRows(items.filter(item=>item.type==='task')),button('Tambah tugasan','data-new="task"','plus'))+section('Acara',scheduleRows(items.filter(item=>item.type==='event')),button('Tambah acara','data-new="event"','plus'))+section('Peringatan',taskRows(items.filter(item=>item.type==='reminder'),'Tiada tarikh akhir penting dalam tempoh ini.'),button('Tambah peringatan','data-new="reminder"','plus'))+'</div>';
+ if(view==='Day') return '<section class="panel">'+nav+'</section>'+agenda;
+ const cells=Array.from({length:count},(_,i)=>{
+  const day=add(start,i);
+  const items=scheduledOn(day,['task','event','reminder']);
+  const limit=view==='Month'?2:7;
+  return '<div class="cell'+(day.slice(0,7)!==focus.slice(0,7)?' outside':'')+'"><button class="day-num'+(day===today?' today':'')+'" data-day="'+day+'" aria-label="Buka '+fullDate(day)+'">'+Number(day.slice(8))+'</button>'+items.slice(0,limit).map(item=>'<button class="event'+(item.type==='reminder'?' deadline':'')+'" data-edit="'+item.id+'" title="'+html(types[item.type]+' · '+item.title+' · '+domainName(item.domain)+(item.type==='task'?' · '+priorities[taskPriority(item)]:''))+'">'+priorityMarker(item,true)+html((item.type==='reminder'?'Deadline · ':item.time?item.time+' ':item.type==='task'?'Tugasan · ':'')+item.title)+(item.repeat?' <span class="recurrence" aria-label="Berulang setiap minggu">↻</span>':'')+'</button>').join('')+(items.length>limit?'<button class="event more" data-day="'+day+'">+'+(items.length-limit)+' lagi</button>':'')+'</div>';
+ }).join('');
+ return '<section class="panel">'+nav+'<div class="calendar-scroll" tabindex="0" aria-label="Jadual kalendar"><div class="calendar '+view.toLowerCase()+'">'+['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map(day=>'<div class="weekday">'+day+'</div>').join('')+cells+'</div></div></section>'+agenda;
+}
+function tasks() {
+ const items=visible(records).filter(x=>x.type==='task'&&(taskFilter==='All'||Boolean(x.done)===(taskFilter==='Completed'))).sort((a,b)=>a.date.localeCompare(b.date));
+ const filters='<div class="segments" aria-label="Status tugasan">'+Object.entries(statuses).map(([name,label])=>'<button data-task-filter="'+name+'" class="'+(taskFilter===name?'active':'')+'" aria-pressed="'+(taskFilter===name)+'">'+label+'</button>').join('')+'</div>';
+ return section('Senarai tugasan',taskRows(items),filters);
+}
+function reminders() {
+ const items=visible(records).filter(x=>x.type==='reminder').sort((a,b)=>a.date.localeCompare(b.date));
+ return section('Tarikh akhir penting',taskRows(items,'Tiada tarikh akhir penting untuk kumpulan ini.'),button('Tambah peringatan','data-new="reminder"','plus'));
+}
+function knowledge() {
+ const items=visible(notes).filter(item=>(item.kind==='Rujukan'||item.kind==='Penyelidikan')&&tagged(item,'Knowledge'));
+ const rows=items.map(item=>'<div class="row"><div class="row-main"><button class="row-title" data-note="'+notes.indexOf(item)+'">'+html(item.title)+'</button><p class="small muted">'+html(domainName(item.domain))+' · '+html(item.kind)+'</p>'+tagBadges(item)+'</div></div>').join('');
+ return tagNav('Knowledge')+section('Rujukan bacaan dan nota kajian',rows?'<div class="rows">'+rows+'</div>':blank('Tiada nota untuk kumpulan ini.'));
+}
+function tagBadges(item) {
+ return item.tags?.length?'<div class="tag-badges">'+item.tags.map(badge).join('')+'</div>':'';
+}
+function tagNav(scope) {
+ const links=['',...tags[scope]].map((name,index)=>{
+  const active=tagSelection[scope]===name;
+  return button(html(name||'Semua'),'data-tag-scope="'+scope+'" data-tag-index="'+index+'" aria-pressed="'+active+'"','',active?'active':'');
+ }).join('');
+ return '<nav class="tag-nav" aria-label="Tapis mengikut tag">'+links+button('Tambah tag','data-add-tag="'+scope+'"','plus')+'</nav>';
+}
+function tagOptions(scope,selected,hidden=false) {
+ return '<fieldset class="tag-options" id="'+(scope==='Events'?'event-tags':scope==='Notes'?'note-tags':'knowledge-tags')+'" '+(hidden?'hidden':'')+'><legend>Tag</legend>'+(tags[scope].length?tags[scope].map(name=>'<label><input type="checkbox" name="tags" value="'+html(name)+'"'+(selected.includes(name)?' checked':'')+'>'+html(name)+'</label>').join(''):'<span class="small muted">Cipta tag melalui butang Tambah tag dalam menu '+modules[scope][0]+'.</span>')+'</fieldset>';
+}
+function tagForm(scope) {
+ openDialog('Tambah tag','<form class="dialog-body" id="tag-form"><label>Nama tag<input name="tag" maxlength="48" required autofocus></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan tag</button></div></form>');
+ const form=$('tag-form');
+ const field=form.elements.tag;
+ field.focus();
+ field.addEventListener('input',()=>field.setCustomValidity(''));
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  const name=field.value.trim();
+  if (!name || tags[scope].some(tag=>tag.toLowerCase()===name.toLowerCase())) {
+   field.setCustomValidity(name?'Nama tag sudah digunakan.':'Masukkan nama tag.');
+   field.reportValidity();
+   return;
+  }
+  tags[scope].push(name);
+  tagSelection[scope]=name;
+  $('modal').close();
+  save('Tag ditambah');
+ });
+}
+function tagged(item,scope) {
+ return !tagSelection[scope]||item.tags?.includes(tagSelection[scope]);
+}
+function eventsPage() {
+ const items=visible(records).filter(item=>item.type==='event'&&tagged(item,'Events'))
+  .sort((a,b)=>a.date.localeCompare(b.date)||(a.time||'').localeCompare(b.time||''));
+ return tagNav('Events')+section('Senarai acara',scheduleRows(items,'Tiada acara dalam paparan ini.'));
+}
+function subfolderOptions(folder,current,emptyLabel) {
+ return '<option value="">'+emptyLabel+'</option>'+subfolders.filter(item=>item.folder===folder).map(({name})=>'<option value="'+html(name)+'"'+(name===current?' selected':'')+'>'+html(name)+'</option>').join('');
+}
+function subfolderForm() {
+ const folder=domain;
+ openDialog('Tambah subfolder','<form id="subfolder-form" class="dialog-body"><p class="small muted">'+html(folder)+'</p><label>Nama subfolder<input name="name" maxlength="48" required autofocus></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan subfolder</button></div></form>');
+ const form=$('subfolder-form');
+ const field=form.elements.name;
+ field.focus();
+ field.addEventListener('input',()=>field.setCustomValidity(''));
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  const name=field.value.trim();
+  if (!name || subfolders.some(item=>item.folder===folder&&item.name.toLowerCase()===name.toLowerCase())) {
+   field.setCustomValidity(name?'Nama subfolder sudah digunakan.':'Masukkan nama subfolder.');
+   field.reportValidity();
+   return;
+  }
+  subfolders.push({folder,name});
+  selectedSubfolder=name;
+  $('modal').close();
+  save('Subfolder ditambah');
+ });
+}
+function personalNotes() {
+ const subfilter=domain?'<div class="subfolder-nav"><select class="filter" id="subfolder-select" aria-label="Tapis mengikut subfolder">'+subfolderOptions(domain,selectedSubfolder,'Semua subfolder')+'</select>'+button('Tambah subfolder','data-add-subfolder','plus')+'</div>':'<p class="small muted subfolder-nav">Pilih kumpulan untuk melihat atau menambah subfolder.</p>';
+ const rows=visible(notes).filter(item=>item.kind==='Nota peribadi'&&(!selectedSubfolder||item.subfolder===selectedSubfolder)&&tagged(item,'Notes')).map(item=>'<div class="row"><div class="row-main"><button class="row-title" data-note="'+notes.indexOf(item)+'">'+html(item.title)+'</button><p class="small muted">'+html(domainName(item.domain)+(item.subfolder?' / '+item.subfolder:''))+'</p>'+tagBadges(item)+'</div></div>').join('');
+ return subfilter+tagNav('Notes')+section('Senarai nota',rows?'<div class="rows">'+rows+'</div>':blank('Tiada nota peribadi dalam paparan ini.'));
+}
+function chapterOptions(current) {
+ return '<option value="0"'+(current===0?' selected':'')+'>Catatan Awal</option>'+chapterNames.map((name,i)=>'<option value="'+(i+1)+'"'+(current===i+1?' selected':'')+'>Bab '+(i+1)+' · '+name+'</option>').join('');
+}
+function thesisRows(items) {
+ return items.length?'<div class="rows">'+items.map(item=>{
+  const index=notes.indexOf(item);
+  return '<div class="row thesis-row" draggable="true" data-drag-note="'+index+'"><div class="row-main"><button class="row-title" data-note="'+index+'">'+html(item.title)+'</button></div><select class="filter" data-move-note="'+index+'" aria-label="Pindahkan '+html(item.title)+'">'+chapterOptions(item.chapter)+'</select></div>';
+ }).join('')+'</div>':blank('Tiada nota di sini.');
+}
+function thesisPage() {
+ const items=notes.filter(item=>item.thesis===page);
+ const active=selectedChapter[page];
+ const folders=chapterNames.map((name,i)=>{
+  const chapter=i+1;
+  return button('<span class="inline">'+icon('project')+' Bab '+chapter+'</span><span>'+name+'</span><span class="small muted">'+items.filter(item=>item.chapter===chapter).length+' nota</span>','data-chapter="'+chapter+'" data-drop-chapter="'+chapter+'" aria-pressed="'+(active===chapter)+'"','',active===chapter?'chapter-card active':'chapter-card');
+ }).join('');
+ return '<div class="thesis-folders" role="group" aria-label="Folder bab">'+folders+'</div>'+section('Bab '+active+' · '+chapterNames[active-1],thesisRows(items.filter(item=>item.chapter===active)),button('Tambah nota bab','data-add-note="'+page+'" data-in-chapter="'+active+'"','plus'))+'<div class="thesis-tray" data-drop-chapter="0">'+section('Catatan Awal','<p class="detail small muted">Simpan idea di sini. Seret nota ke folder bab atau gunakan pilihan pindah pada nota.</p>'+thesisRows(items.filter(item=>item.chapter===0)),button('Tambah catatan awal','data-add-note="'+page+'"','plus'))+'</div>';
+}
+function moveThesisNote(index,chapter) {
+ const item=notes[index];
+ if (!isThesis(page)||item?.thesis!==page||!Number.isInteger(chapter)||chapter<0||chapter>chapterNames.length||item.chapter===chapter) return;
+ item.chapter=chapter;
+ if (chapter) selectedChapter[page]=chapter;
+ save(chapter?'Nota dipindahkan ke Bab '+chapter:'Nota dipindahkan ke Catatan Awal');
+}
+function noteForm(scope,index,chapter=0) {
+ const item=notes[index];
+ const initial=item||{title:'',note:'',domain,kind:'Rujukan'};
+ const personal=scope==='Notes';
+ const thesis=isThesis(scope);
+ const label=personal||thesis?'nota':'entri';
+ const kindField=personal||thesis?'':'<label>Jenis entri<select name="kind">'+['Rujukan','Penyelidikan'].map(kind=>'<option'+(kind===initial.kind?' selected':'')+'>'+kind+'</option>').join('')+'</select></label>';
+ const locationField=thesis?'<label>Lokasi nota<select name="chapter">'+chapterOptions(item?.chapter??chapter)+'</select></label>':'<label>Kumpulan<select name="domain">'+selectDomain(initial.domain,'Tanpa kumpulan')+'</select></label>';
+ const subfolderField=personal?'<label id="note-subfolder-field" '+(initial.domain?'':'hidden')+'>Subfolder<select name="subfolder">'+subfolderOptions(initial.domain,item?.subfolder??selectedSubfolder,'Tanpa subfolder')+'</select></label>':'';
+ const tagsField=thesis?'':tagOptions(scope,item?(item.tags||[]):[tagSelection[scope]]);
+ openDialog((item?'Sunting ':'Tambah ')+label,'<form class="dialog-body" id="personal-note-form"><label>Tajuk<input name="title" required maxlength="120" value="'+html(initial.title)+'" autofocus></label>'+kindField+locationField+subfolderField+'<label>Catatan<textarea name="note" rows="14" required>'+html(initial.note)+'</textarea></label>' +tagsField+'<div class="dialog-actions">'+(item?button('Padam','data-delete-note="'+index+'"','','left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan '+label+'</button></div></form>');
+ const form=$('personal-note-form');
+ form.elements.title.focus();
+ if (personal) form.elements.domain.addEventListener('change',()=>{
+  const folder=form.elements.domain.value;
+  $('note-subfolder-field').hidden=!folder;
+  form.elements.subfolder.innerHTML=subfolderOptions(folder,'','Tanpa subfolder');
+ });
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  const title=form.elements.title.value.trim();
+  const note=form.elements.note.value.trim();
+  if (!title || !note) {
+   const field=form.elements[!title?'title':'note'];
+   field.setCustomValidity(!title?'Masukkan tajuk.':'Masukkan catatan.');
+   field.reportValidity();
+   return;
+  }
+  const values={id:item?.id||'n-'+crypto.randomUUID(),title,note,domain:thesis?'':form.elements.domain.value,kind:thesis?'Nota tesis':personal?'Nota peribadi':form.elements.kind.value,tags:new FormData(form).getAll('tags')};
+  if (personal) values.subfolder=form.elements.subfolder.value;
+  if (thesis) {
+   values.thesis=scope;
+   values.chapter=Number(form.elements.chapter.value);
+   if (page===scope && values.chapter) selectedChapter[scope]=values.chapter;
+  }
+  if (item) notes[index]=values; else notes.push(values);
+  drafts.clear();
+  $('modal').close();
+  save(item?'Perubahan disimpan':personal||thesis?'Nota ditambah':'Entri ditambah');
+ });
+ form.addEventListener('input',event=>event.target.setCustomValidity(''));
+ drafts.attach(form,'note:'+scope+':'+(item?.id||'new'));
+}
+function settings() {
+ const tabs={Domains:'Kumpulan',Projects:'Projek',General:'Umum'};
+ const switches='<div class="segments settings-tabs" aria-label="Bahagian tetapan">'+Object.entries(tabs).map(([id,label])=>'<button data-settings="'+id+'" class="'+(settingsTab===id?'active':'')+'" aria-pressed="'+(settingsTab===id)+'">'+label+'</button>').join('')+'</div>';
+ if (settingsTab==='Projects') return switches+projectPanel();
+ if (settingsTab==='General') return switches+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam pelayar ini. Eksport sandaran untuk berpindah pelayar, peranti atau alamat web.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>')+'<div class="group-notes">'+section('Data contoh','<div class="detail"><p class="muted">Pulihkan rekod contoh bertarikh November 2026. Data semasa dan draf akan digantikan.</p><p>'+button('Pulihkan data contoh','data-reset')+'</p></div>')+'</div>';
+ const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
+ return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
+}
+function downloadText(filename,source) {
+ const url=URL.createObjectURL(new Blob([source],{type:'application/json'}));
+ const link=document.createElement('a');
+ link.href=url;
+ link.download=filename;
+ document.body.append(link);
+ link.click();
+ link.remove();
+ setTimeout(()=>URL.revokeObjectURL(url),1000);
+}
+function exportBackup() {
+ try {
+  downloadText('khuttah-backup-'+today+'.json',JSON.stringify(createBackup(currentState()),null,2));
+  notify('Sandaran dimuat turun');
+ } catch (error) { notify('Sandaran tidak dapat disediakan: '+error.message); }
+}
+function importDialog() {
+ openDialog('Import sandaran','<form class="dialog-body" id="import-form"><p class="small muted">Pilih fail sandaran KHUTTAH. Eksport data semasa dahulu jika anda mahu menyimpannya.</p><label>Fail sandaran<input type="file" name="file" accept=".json,application/json" required></label><p id="import-preview" class="small" role="status">Belum ada fail dipilih.</p><p id="import-error" class="small" role="alert"></p><label class="import-confirm"><input type="checkbox" name="confirm" required> Saya faham data semasa dan draf akan digantikan.</label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" id="import-submit" type="submit" disabled>Ganti dengan sandaran</button></div></form>');
+ const form=$('import-form');
+ let incoming=null;
+ form.elements.file.addEventListener('change',async()=>{
+  incoming=null;
+  $('import-submit').disabled=true;
+  $('import-error').textContent='';
+  const file=form.elements.file.files[0];
+  if (!file) { $('import-preview').textContent='Belum ada fail dipilih.'; return; }
+  $('import-preview').textContent='Menyemak fail…';
+  try {
+   if (file.size>MAX_BACKUP_BYTES) throw new Error('Saiz maksimum sandaran ialah 10 MB.');
+   const candidate=migrateGroupNames(parseBackup(await file.text()));
+   if (form.elements.file.files[0]!==file||!form.isConnected) return;
+   incoming=candidate;
+   $('import-preview').textContent=candidate.records.length+' rekod · '+candidate.notes.length+' nota · '+candidate.domains.length+' kumpulan';
+   $('import-submit').disabled=false;
+  } catch (error) {
+   if (!form.isConnected||form.elements.file.files[0]!==file) return;
+   $('import-preview').textContent='Fail tidak boleh diimport.';
+   $('import-error').textContent=error.message;
+  }
+ });
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  if (!incoming) return;
+  try { localStorage.setItem(key,JSON.stringify(incoming)); }
+  catch { $('import-error').textContent='Storan pelayar tidak dapat ditulis. Data semasa belum diganti.'; return; }
+  ({records,domains,projects,notes,tags,subfolders}=incoming);
+  recoverySource=null;
+  drafts.clearAll();
+  selectedSubfolder='';
+  selectedChapter.Master=1;
+  selectedChapter.PhD=1;
+  for (const scope of Object.keys(tagSelection)) tagSelection[scope]='';
+  domain='';
+  page='Overview';
+  $('modal').close();
+  save('Sandaran berjaya dipulihkan');
+ });
+}
+function moveDomain(previous,next) {
+ if (next) {
+  for (const item of subfolders) if (item.folder===previous) item.folder=next;
+ } else {
+  subfolders=subfolders.filter(item=>item.folder!==previous);
+  for (const item of notes) if (item.domain===previous) item.subfolder='';
+  if (domain===previous) selectedSubfolder='';
+ }
+ for (const item of [...records,...projects,...notes]) {
+  if (item.domain===previous) item.domain=next;
+ }
+ if (domain===previous) domain=next;
+}
+function domainForm(index) {
+ const previous=domains[index];
+ const editing=previous!==undefined;
+ openDialog(editing?'Sunting kumpulan':'Tambah kumpulan','<form class="dialog-body" id="domain-form"><label>Nama kumpulan<input name="name" required maxlength="45" value="'+html(previous)+'" autofocus></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan</button></div></form>');
+ const form=$('domain-form');
+ const input=form.elements.name;
+ input.focus();
+ input.addEventListener('input',()=>input.setCustomValidity(''));
+ form.addEventListener('submit',event=>{
+  event.preventDefault();
+  const name=input.value.trim();
+  if (!name || domains.some((entry,i)=>i!==index && entry.toLowerCase()===name.toLowerCase())) {
+   input.setCustomValidity(name?'Nama kumpulan ini sudah digunakan.':'Masukkan nama kumpulan.');
+   input.reportValidity();
+   return;
+  }
+  if (editing) {
+   domains[index]=name;
+   moveDomain(previous,name);
+  } else domains.push(name);
+  $('modal').close();
+  save(editing?'Kumpulan dikemas kini':'Kumpulan ditambah');
+ });
+}
+function openDialog(title, body) {
+ drafts.detach();
+ $('modal').innerHTML='<div class="section-head"><h2 id="modal-title">'+html(title)+'</h2>'+button('','data-close aria-label="Tutup dialog"','close','icon ghost')+'</div>'+body;
+ if (!$('modal').open) $('modal').showModal();
+}
+function itemForm(type, item) {
+ const initial = item || {type,title:'',domain:domain||(domains.includes('Peribadi')?'Peribadi':''),date:page==='Planner'?focus:today,time:'',repeat:'',detail:''};
+ const priorityField='<label id="task-priority" '+(initial.type==='task'?'':'hidden')+'>Tahap kepentingan<select name="priority">'+Object.entries(priorities).map(([level,label])=>'<option value="'+level+'"'+(taskPriority(initial)===level?' selected':'')+'>'+label+'</option>').join('')+'</select></label>';
+ openDialog(item?'Sunting '+types[item.type].toLowerCase():'Tambah rekod','<form class="dialog-body" id="item-form"><label>Tajuk<input name="title" required maxlength="120" value="'+html(initial.title)+'" autofocus></label><div class="form-grid"><label>Jenis<select name="type">'+Object.entries(types).map(([name,label])=>'<option value="'+name+'" '+(initial.type===name?'selected':'')+'>'+label+'</option>').join('')+'</select></label>'+priorityField+'<label>Kumpulan<select name="domain">'+selectDomain(initial.domain,'Tanpa kumpulan')+'</select></label><label><span id="record-date-label">'+recordDateLabels[initial.type]+'</span><input type="date" name="date" required min="1900-01-01" max="9999-12-31" value="'+initial.date+'"></label><label id="event-time" '+(initial.type==='event'?'':'hidden')+'>Masa<input type="time" name="time" value="'+html(initial.time)+'"></label></div><label id="event-repeat" '+(initial.type==='event'?'':'hidden')+'>Ulangan<select name="repeat"><option value="">Tiada ulangan</option><option value="weekly" '+(initial.repeat?'selected':'')+'>Setiap minggu</option></select></label><label>Catatan<input name="detail" value="'+html(initial.detail)+'" maxlength="240" placeholder="Pilihan"></label>'+tagOptions('Events',item?(item.tags||[]):page==='Events'?[tagSelection.Events]:[],initial.type!=='event')+'<div class="dialog-actions">'+(item?button('Padam','data-delete="'+item.id+'"','', 'left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">'+(item?'Simpan perubahan':'Tambah rekod')+'</button></div></form>');
+ const form=$('item-form');
+ form.elements.title.focus();
+ form.elements.type.addEventListener('change',()=>{
+  const event=form.elements.type.value==='event';
+  $('record-date-label').textContent=recordDateLabels[form.elements.type.value];
+  $('event-time').hidden=!event;
+  $('event-repeat').hidden=!event;
+  $('event-tags').hidden=!event;
+  $('task-priority').hidden=form.elements.type.value!=='task';
+ });
+ form.addEventListener('submit', e=>{
+  e.preventDefault();
+  const fields=new FormData(form);
+  const values=Object.fromEntries(fields);
+  values.tags=values.type==='event'?fields.getAll('tags'):[];
+  values.title=values.title.trim();
+  if(!values.title){ form.elements.title.setCustomValidity('Masukkan tajuk.'); form.elements.title.reportValidity(); return; }
+  if(values.type!=='event'){ values.time=''; values.repeat=''; }
+  if (values.type!=='task') delete values.priority;
+  if(item) {
+   if (values.type!=='task') delete item.priority;
+   const done=item.type===values.type&&Boolean(item.done);
+   Object.assign(item,values,{done});
+  } else records.push({id:'i'+Date.now().toString(36)+Math.random().toString(36).slice(2,8),...values,done:false});
+  drafts.clear();
+  $('modal').close();
+  save(item?'Rekod dikemas kini':'Rekod ditambah');
+ });
+ form.elements.title.addEventListener('input',()=>form.elements.title.setCustomValidity(''));
+ drafts.attach(form,'record:'+(item?.id||'new-'+type));
+}
+function searchDialog() {
+ openDialog('Carian ruang kerja','<div class="dialog-body"><label>Cari tajuk, kumpulan dan catatan<input id="query" type="search" placeholder="Contoh: Uthmani atau sirah" autocomplete="off" autofocus></label><div id="search-results" aria-live="polite"></div></div>');
+ const entries=[
+  ...visible(records).map(item=>({...item,attrs:'data-edit="'+item.id+'"',kind:types[item.type]})),
+  ...visible(projects).map(item=>({...item,attrs:'data-project="'+projects.indexOf(item)+'"',kind:'Projek'})),
+  ...visible(notes).map(item=>({...item,attrs:'data-note="'+notes.indexOf(item)+'"'}))
+ ];
+ const query=$('query');
+ const update=()=>{
+  const phrase=query.value.trim().toLowerCase();
+  if (!phrase){ $('search-results').innerHTML=blank(domain?'Cari dalam '+html(domain)+'.':'Cari dalam semua kumpulan.'); return; }
+  const hits=entries.filter(item=>[item.title,item.domain,item.note,item.detail,item.kind,...(item.tags||[])].join(' ').toLowerCase().includes(phrase)).slice(0,10);
+  $('search-results').innerHTML=hits.length?hits.map(item=>'<div class="row"><div class="row-main"><button class="row-title" '+item.attrs+'>'+html(item.title)+'</button><p class="small muted">'+html(domainName(item.domain)+' · '+item.kind)+'</p></div></div>').join(''):blank('Tiada padanan.');
+ };
+ query.addEventListener('input',update);
+ query.focus();
+ update();
+}
+function adjustDate(step) {
+ if(view==='Month'){
+  const date=dateOf(focus.slice(0,7)+'-01');
+  date.setUTCMonth(date.getUTCMonth()+step);
+  focus=isoOf(date);
+ } else focus=add(focus,step*(view==='Week'?7:1));
+}
+document.addEventListener('click',e=>{
+ const control=e.target.closest('button');
+ if (!control) return;
+ const data=control.dataset;
+ if ('undo' in data) {
+  const restore=undoAction;
+  undoAction=null;
+  if (restore) { restore(); save('Pemadaman dibatalkan'); }
+  return;
+ }
+ if ('export' in data) { exportBackup(); return; }
+ if ('exportRecovery' in data) { downloadText('khuttah-recovery-'+today+'.json',recoverySource); return; }
+ if ('import' in data) { importDialog(); return; }
+ if (control.id==='more-menu'){ moreNavigation(); return; }
+ if ('close' in data){ $('modal').close(); return; }
+ if ('page' in data){
+  const fromMore='fromMore' in data;
+  const fromBottom=control.closest('#bottom-nav');
+  if (fromMore) $('modal').close();
+  showPage(data.page);
+  if (fromMore) $('more-menu').focus();
+  if (fromBottom) $('bottom-nav').querySelector('[aria-current="page"]').focus();
+  if ('profileSettings' in data&&!fromMore) $('sidebar').querySelector('[data-profile-settings]').focus();
+  return;
+ }
+ if ('period' in data){
+  period=data.period;
+  render();
+  document.querySelector('[data-period="'+period+'"]').focus();
+  return;
+ }
+ if ('scope' in data){
+  domain=['',...domains][Number(data.scope)];
+  selectedSubfolder='';
+  const fromMore='fromMore' in data;
+  if (fromMore) $('modal').close();
+  showPage(domain?'Group':'Overview');
+  if (fromMore) $('more-menu').focus();
+  else $('sidebar').querySelector('[data-scope="'+data.scope+'"]').focus();
+  return;
+ }
+ if ('settings' in data){ settingsTab=data.settings; render(); document.querySelector('[data-settings="'+settingsTab+'"]').focus(); return; }
+ if ('addDomain' in data){ domainForm(); return; }
+ if ('renameDomain' in data){ domainForm(Number(data.renameDomain)); return; }
+ if ('removeDomain' in data){
+  const index=Number(data.removeDomain);
+  openDialog('Buang kumpulan '+domains[index]+'?','<div class="dialog-body"><p>Rekod dalam kumpulan ini akan dipindahkan ke kategori Tanpa kumpulan.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Buang kumpulan','data-confirm-remove-domain="'+index+'"','','primary')+'</div></div>'); return;
+ }
+ if ('confirmRemoveDomain' in data){
+  const [name]=domains.splice(Number(data.confirmRemoveDomain),1);
+  moveDomain(name,'');
+  $('modal').close();
+  save('Kumpulan dibuang'); return;
+ }
+ if ('search' in data){ searchDialog(); return; }
+ if ('new' in data){ itemForm(data.new); return; }
+ if ('postpone' in data){ postponeForm(data.postpone); return; }
+ if ('edit' in data){ const item=records.find(x=>x.id===data.edit); if(item) itemForm(item.type,item); return; }
+ if ('delete' in data){ openDialog('Padam rekod?','<div class="dialog-body"><p>Rekod ini akan dipadam daripada prototaip.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam','data-confirm-delete="'+data.delete+'"','','primary')+'</div></div>'); return; }
+ if ('confirmDelete' in data){
+  const index=records.findIndex(item=>item.id===data.confirmDelete);
+  if (index<0) return;
+  const [removed]=records.splice(index,1);
+  $('modal').close();
+  save('Rekod dipadam',()=>{ if (!records.some(item=>item.id===removed.id)) records.splice(Math.min(index,records.length),0,removed); });
+  return;
+ }
+ if ('view' in data){ view=data.view; render(); return; }
+ if ('step' in data){ adjustDate(Number(data.step)); render(); return; }
+ if ('today' in data){ focus=today; render(); return; }
+ if ('day' in data){ focus=data.day; view='Day'; render(); return; }
+ if ('taskFilter' in data){ taskFilter=data.taskFilter; render(); return; }
+ if ('project' in data){
+  const item=projects[Number(data.project)];
+  openDialog(item.title,'<div class="detail"><p>'+badge(domainName(item.domain))+'</p><p>'+html(item.note)+'</p><p class="muted">'+item.progress+'% siap</p></div>'); return;
+ }
+ if ('addTag' in data){ tagForm(data.addTag); return; }
+ if ('tagScope' in data){
+  tagSelection[data.tagScope]=['',...tags[data.tagScope]][Number(data.tagIndex)];
+  render();
+  document.querySelector('[data-tag-scope="'+data.tagScope+'"][aria-pressed="true"]').focus();
+  return;
+ }
+ if ('addSubfolder' in data){ subfolderForm(); return; }
+ if ('chapter' in data){ selectedChapter[page]=Number(data.chapter); render(); document.querySelector('[data-chapter="'+data.chapter+'"]').focus(); return; }
+ if ('addNote' in data){ noteForm(data.addNote,undefined,Number(data.inChapter||0)); return; }
+ if ('deleteNote' in data){
+  openDialog('Padam catatan?','<div class="dialog-body"><p>Catatan ini akan dipadam.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam','data-confirm-delete-note="'+data.deleteNote+'"','','primary')+'</div></div>');
+  return;
+ }
+ if ('confirmDeleteNote' in data){
+  const index=Number(data.confirmDeleteNote);
+  const [removed]=notes.splice(index,1);
+  $('modal').close();
+  save('Catatan dipadam',removed?()=>{ if (!notes.some(item=>item.id===removed.id)) notes.splice(Math.min(index,notes.length),0,removed); }:null);
+  return;
+ }
+ if ('note' in data){
+  const index=Number(data.note);
+  const item=notes[index];
+  noteForm(item.thesis||(item.kind==='Nota peribadi'?'Notes':'Knowledge'),index);
+  return;
+ }
+ if ('reset' in data){ openDialog('Pulihkan data contoh?','<div class="dialog-body"><p>Tugasan, acara, peringatan, nota, kumpulan, subfolder dan tag akan dikembalikan kepada data contoh.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Pulihkan data','data-confirm-reset','','primary')+'</div></div>'); return; }
+ if ('confirmReset' in data){ ({records,domains,projects,notes,tags,subfolders}=sampleState()); drafts.clearAll(); recoverySource=null; selectedSubfolder=''; selectedChapter.Master=1; selectedChapter.PhD=1; for (const scope of Object.keys(tagSelection)) tagSelection[scope]=''; domain=''; $('modal').close(); save('Data contoh dipulihkan'); }
+});
+document.addEventListener('change',e=>{
+ const control=e.target;
+ if ('moveNote' in control.dataset){ moveThesisNote(Number(control.dataset.moveNote),Number(control.value)); return; }
+ if (control.id==='subfolder-select'){ selectedSubfolder=control.value; render(); $('subfolder-select').focus(); return; }
+ if (control.id==='domain-select'){ domain=control.value; selectedSubfolder=''; if (page==='Group'&&!domain) page='Overview'; render(); $('domain-select').focus(); return; }
+ if ('check' in control.dataset){
+  const item=records.find(x=>x.id===control.dataset.check);
+  if(item){ item.done=control.checked; save(item.done?'Ditandakan selesai':'Dibuka semula'); }
+ }
+});
+let draggedNote=null;
+document.addEventListener('dragstart',event=>{
+ const row=event.target.closest('[data-drag-note]');
+ if (!row||!event.dataTransfer) return;
+ draggedNote=Number(row.dataset.dragNote);
+ event.dataTransfer.setData('text/plain',row.dataset.dragNote);
+ event.dataTransfer.effectAllowed='move';
+});
+document.addEventListener('dragover',event=>{
+ const target=event.target.closest('[data-drop-chapter]');
+ if (draggedNote===null||!target) return;
+ event.preventDefault();
+ event.dataTransfer.dropEffect='move';
+ target.classList.add('drop-ready');
+});
+document.addEventListener('dragleave',event=>{
+ const target=event.target.closest('[data-drop-chapter]');
+ if (target&&!target.contains(event.relatedTarget)) target.classList.remove('drop-ready');
+});
+document.addEventListener('dragend',()=>{
+ draggedNote=null;
+ document.querySelectorAll('.drop-ready').forEach(target=>target.classList.remove('drop-ready'));
+});
+document.addEventListener('drop',event=>{
+ const target=event.target.closest('[data-drop-chapter]');
+ if (draggedNote===null||!target) return;
+ event.preventDefault();
+ target.classList.remove('drop-ready');
+ const index=draggedNote;
+ draggedNote=null;
+ moveThesisNote(index,Number(target.dataset.dropChapter));
+});
+document.addEventListener('keydown',e=>{
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); searchDialog(); }
+});
+$('modal').addEventListener('close',()=>{ if (!$('modal').open) drafts.detach(); });
+window.addEventListener('pagehide',()=>drafts.capture());
+document.addEventListener('visibilitychange',()=>{ if (document.hidden) drafts.capture(); });
+render();

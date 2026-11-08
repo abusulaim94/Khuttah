@@ -527,7 +527,7 @@ function settings() {
  const tabs={Domains:'Kumpulan',Projects:'Projek',General:'Umum'};
  const switches='<div class="segments settings-tabs" aria-label="Bahagian tetapan">'+Object.entries(tabs).map(([id,label])=>'<button data-settings="'+id+'" class="'+(settingsTab===id?'active':'')+'" aria-pressed="'+(settingsTab===id)+'">'+label+'</button>').join('')+'</div>';
  if (settingsTab==='Projects') return switches+projectPanel();
- if (settingsTab==='General') return switches+section('Data contoh','<div class="detail"><p class="muted">Perubahan disimpan dalam pelayar ini apabila storan tempatan tersedia. Rekod contoh bertarikh November 2026.</p><p>'+button('Pulihkan data contoh','data-reset')+'</p></div>');
+ if (settingsTab==='General') return switches+section('Data contoh','<div class="detail"><p class="muted">Perubahan disimpan dalam pelayar ini apabila storan tempatan tersedia. Rekod contoh bertarikh November 2026.</p><p>'+button('Eksport untuk web app','data-export-prototype')+' '+button('Pulihkan data contoh','data-reset')+'</p></div>');
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
  return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
 }
@@ -675,6 +675,12 @@ document.addEventListener('click',e=>{
   moveDomain(name,'');
   $('modal').close();
   save('Kumpulan dibuang'); return;
+ }
+ if ('exportPrototype' in data){
+  const backup={format:'khuttah-backup',version:1,exportedAt:new Date().toISOString(),data:{records,domains,projects,notes,tags,subfolders,groupLayoutVersion:1}};
+  const url=URL.createObjectURL(new Blob([JSON.stringify(backup,null,2)],{type:'application/json'}));
+  const link=document.createElement('a');link.href=url;link.download='khuttah-backup-'+today+'.json';document.body.append(link);link.click();link.remove();setTimeout(()=>URL.revokeObjectURL(url),1000);
+  notify('Sandaran sedia untuk diimport ke web app');return;
  }
  if ('search' in data){ searchDialog(); return; }
  if ('new' in data){ itemForm(data.new); return; }
