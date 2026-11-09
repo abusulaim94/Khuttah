@@ -141,6 +141,32 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .deadline-rows{max-height:360px;overflow:auto}
 .deadline-rows>.row>svg{margin:0 1px;width:16px;height:16px;color:var(--sub)}
 .form-error{color:#b91c1c;font-size:12px}.form-error:empty{display:none}
+.book-workspace{display:grid;grid-template-columns:270px minmax(0,1fr);gap:20px;align-items:start}
+.book-library{min-width:0;position:sticky;top:18px;max-height:calc(100dvh - 40px);overflow:auto;border:1px solid var(--border);border-radius:12px;background:white;padding:12px}
+.library-heading{display:flex;align-items:center;justify-content:space-between;gap:8px;margin-bottom:10px}
+.library-heading h2{font-size:14px}.library-heading .btn{font-size:11px;min-height:30px}
+.book-library>#book-subject-filter{width:100%;margin-bottom:12px}
+.book-target{display:flex;align-items:flex-start;gap:9px;width:100%;border:1px solid transparent;border-radius:8px;background:transparent;padding:10px 7px;color:var(--sub);text-align:left;min-height:45px;overflow-wrap:anywhere}
+.book-target>svg{width:16px;height:16px;margin-top:2px}.book-target-text{min-width:0;flex:1;display:grid;gap:4px}.book-target strong{font-size:12px;font-weight:550;line-height:1.5}.book-target small{font-size:10px;color:var(--muted)}
+.book-target:hover{background:var(--soft)}.book-target.active{background:#f0f2f5;border-color:#d9dce2;color:var(--ink)}
+.book-count{display:inline-grid;place-items:center;background:var(--soft);border-radius:5px;padding:1px 5px;min-width:21px;font-size:10px;font-weight:550;flex:none}
+.book-shelf{border-top:1px solid var(--border);margin-top:10px;padding-top:12px}
+.book-shelf>summary{display:flex;align-items:center;gap:7px;cursor:pointer;list-style:none;font-size:12px;min-height:32px}.book-shelf>summary::-webkit-details-marker{display:none}.book-shelf>summary>svg{width:16px;height:16px}.book-shelf>summary>.book-count{margin-left:auto}
+.book-shelf-list{margin-top:6px}.book-shelf-list>.btn{margin:7px 0 0;font-size:11px;min-height:32px}.library-empty{font-size:12px;color:var(--muted);padding:10px 7px}
+.book-board{min-width:0}.book-board-title{display:flex;align-items:start;justify-content:space-between;gap:12px;margin:0 0 18px}.book-board-title>div{min-width:0}.book-board-title h2{font-size:22px;line-height:1.4;overflow-wrap:anywhere}.book-board-title .tag-badges{margin-top:8px}.book-board-title>.btn{flex:none}
+.book-board .sticky-grid{grid-template-columns:repeat(auto-fill,minmax(min(235px,100%),1fr))}
+.quick-work-form{border:1px solid var(--border);border-radius:12px;background:white;padding:13px;margin-bottom:20px;min-width:0}
+.quick-work-form textarea{font:inherit;font-size:14px;line-height:1.7;width:100%;border:0;resize:vertical;min-height:85px;background:transparent;color:var(--ink)}
+.quick-work-form textarea:focus-visible{outline:2px solid #a1a1aa;outline-offset:3px;border-radius:3px}
+.quick-work-actions{display:flex;align-items:end;justify-content:space-between;flex-wrap:wrap;gap:12px;padding-top:10px;border-top:1px solid var(--border)}
+.quick-work-actions label{display:grid;gap:4px;flex:1;min-width:140px;max-width:100%;font-size:11px;color:var(--sub)}.quick-work-actions select{width:100%;min-width:0;max-width:100%}.quick-work-actions>.btn{flex:none}
+.sticky-move{display:grid;gap:5px;font-size:10px;color:var(--sub);margin-top:16px}.sticky-move select{width:100%;min-width:0;background:#ffffff90;font-size:11px}
+.note-drag-handle{cursor:grab;font-size:19px!important;touch-action:none;user-select:none;-webkit-user-select:none}
+.sticky-dragging{opacity:.45}.sticky-card[draggable=true]{cursor:grab}
+[data-drop-book].drop-ready{outline:2px dashed #52525b;outline-offset:-2px;background:#e8edf5}
+.note-drag-preview{position:fixed;z-index:1000;pointer-events:none;border-radius:8px;background:var(--ink);color:white;padding:8px 12px;box-shadow:0 5px 18px #18181b33;font-size:12px}
+@media(max-width:1050px) and (min-width:901px){.book-workspace{grid-template-columns:230px minmax(0,1fr);gap:14px}}
+@media(max-width:900px){.book-workspace{grid-template-columns:minmax(0,1fr)}.book-library{position:static;max-height:300px}.book-board-title h2{font-size:20px}.book-board-title{flex-wrap:wrap}.book-board-title>.btn{min-height:34px}.book-board .sticky-grid{grid-template-columns:repeat(auto-fill,minmax(min(230px,100%),1fr))}}
 dialog:has(#personal-note-form){width:min(1100px,calc(100% - 28px));background:#f6f6f7}
 dialog:has(#personal-note-form)>.section-head{background:white;position:sticky;top:0;z-index:3}
 .note-form{padding:18px 24px 0;gap:14px;grid-template-columns:minmax(0,1fr)}

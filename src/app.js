@@ -2,8 +2,9 @@ import {normaliseState, createBackup, parseBackup, MAX_BACKUP_BYTES} from './sto
 import {createDraftController} from './drafts.js';
 import {clearLegacyDemoData} from './cleanup.js';
 import {createCloudController} from './supabase.js';
-import {cleanTagNames, tagScopeOf, changeTag, sortItems, upcomingDeadlines, workCategories, workColors} from './workspace.js';
+import {cleanTagNames, tagScopeOf, changeTag, sortItems, upcomingDeadlines, workCategories, workColors, moveWorkNote, changeBookSubject} from './workspace.js';
 import {createNoteEditor} from './editor.js';
+import {installBookDragging} from './book-drag.js';
 let noteEditor=null;
 
 const drafts=createDraftController();
@@ -28,15 +29,17 @@ const modules = {
  Overview:['Ringkasan','home'], Planner:['Perancang','calendar'], Events:['Acara','calendar'],
  Tasks:['Tugasan','task'], Reminders:['Peringatan','bell'], Knowledge:['Bacaan & Kajian','book'],
  Notes:['Nota','note'], Master:['Master','book'], PhD:['PhD','book'],
- Works:['Karya Abu Sulaim','note'], Settings:['Tetapan','settings'], Group:['Kumpulan','project']
+ Works:['Karya Abu Sulaim','book'], Ideas:['Idea rambang','note'], Settings:['Tetapan','settings'], Group:['Kumpulan','project']
 };
-const primaryPages=['Overview','Planner','Tasks','Events','Reminders','Notes'];
+const primaryPages=['Overview','Planner','Tasks','Events','Reminders','Notes','Ideas'];
 const bottomPages=['Overview','Planner','Tasks','Notes'];
 const secondaryPages=['Knowledge','Master','PhD'];
-const defaultTags={Notes:[],Knowledge:[],Events:[],Works:[]};
-const tagSelection={Notes:'',Events:'',Knowledge:'',Works:''};
+const defaultTags={Notes:[],Knowledge:[],Events:[],Works:[],Ideas:[]};
+const tagSelection={Notes:'',Events:'',Knowledge:'',Works:'',Ideas:''};
 const pageDomains={};
-let workCategory='',workArchived=false,taskDates='all';
+let workPurpose='',workArchived=false,ideasArchived=false,selectedWorkBook='',bookSubjectFilter='',taskDates='all';
+let quickWorkDrafts={};
+try{const value=JSON.parse(localStorage.getItem('khuttah-book-capture-v1')||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))quickWorkDrafts=value;}catch{}
 let sorting={};
 try { const value=JSON.parse(localStorage.getItem('khuttah-sorting-v1')||'{}'); if(value&&typeof value==='object'&&!Array.isArray(value)) sorting=value; } catch {}
 const chapterNames=['Pengenalan','Sorotan Literatur','Metodologi','Dapatan','Perbincangan dan Kesimpulan'];
@@ -59,7 +62,7 @@ function emptyState() {
 let storageOK = true;
 let needsGroupMigration = false;
 let demoCleanupVersion = 1;
-let {records,domains,projects,notes,tags,subfolders} = emptyState();
+let {records,domains,projects,notes,tags,subfolders,library} = emptyState();
 let rawSaved=null;
 try {
  rawSaved=localStorage.getItem(key);
@@ -67,7 +70,7 @@ try {
  const legacy = saved ? null : JSON.parse(localStorage.getItem('khuttah-prototype-v1') ?? 'null');
  if (saved) {
   const validated=normaliseState({...saved,tags:{...defaultTags,...saved.tags}});
-  ({records,domains,projects,notes,tags,subfolders} = validated);
+  ({records,domains,projects,notes,tags,subfolders,library} = validated);
   needsGroupMigration=saved.groupLayoutVersion!==1;
   demoCleanupVersion=saved.demoCleanupVersion===1?1:0;
  }
@@ -77,7 +80,7 @@ try {
    const previous=item.domain==="Az-Zahra'"?'KPAZ':item.domain;
    return {...item,domain:defaultDomains.includes(previous)?previous:previous?'Peribadi':''};
   });
-  ({records,domains,projects,notes,tags,subfolders}=normaliseState({...currentState(),records:legacyRecords}));
+  ({records,domains,projects,notes,tags,subfolders,library}=normaliseState({...currentState(),records:legacyRecords}));
  }
 } catch {
  storageOK=false;
@@ -95,12 +98,12 @@ function migrateGroupNames(state) {
  state.groupLayoutVersion=1;
  return state;
 }
-({records,domains,projects,notes,tags,subfolders}=migrateGroupNames({...currentState(),groupLayoutVersion:needsGroupMigration?0:1}));
+({records,domains,projects,notes,tags,subfolders,library}=migrateGroupNames({...currentState(),groupLayoutVersion:needsGroupMigration?0:1}));
 const cleanedState=clearLegacyDemoData(currentState(),{draftKeys:drafts.keys()});
 if (demoCleanupVersion!==1&&rawSaved&&!recoverySource) {
  try { if (!localStorage.getItem('khuttah-before-demo-cleanup-v1')) localStorage.setItem('khuttah-before-demo-cleanup-v1',rawSaved); } catch {}
 }
-({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=cleanedState);
+({records,domains,projects,notes,tags,subfolders,library,demoCleanupVersion}=cleanedState);
 if (!recoverySource) {
  try { localStorage.setItem(key,JSON.stringify(currentState())); }
  catch { storageOK=false; }
@@ -126,7 +129,7 @@ const domainName = value => value || 'Tanpa kumpulan';
 const badge = label => '<span class="badge">'+html(label)+'</span>';
 const button = (label, attrs, symbol='',classes='') => '<button type="button" class="btn '+classes+'" '+attrs+'>'+(symbol?icon(symbol):'')+label+'</button>';
 const blank = text => '<p class="empty">'+text+'</p>';
-function currentState() { return {records,domains,projects,notes,tags,subfolders,groupLayoutVersion:1,demoCleanupVersion}; }
+function currentState() { return {records,domains,projects,notes,tags,subfolders,library,groupLayoutVersion:1,demoCleanupVersion}; }
 function notify(message,action=null) {
  $('toast').textContent=message;
  undoAction=action;
@@ -268,7 +271,7 @@ async function syncWithCloud({notifyOnDone=false}={}) {
    const remote=await cloud.pullState({draftKeys:drafts.keys()});
    if (remote.status==='loaded'&&!cloud.getMeta().pendingSync) {
     const incoming=migrateGroupNames(remote.state);
-    ({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=incoming);
+    ({records,domains,projects,notes,tags,subfolders,library,demoCleanupVersion}=incoming);
     try { localStorage.setItem(key,JSON.stringify(currentState())); storageOK=true; } catch { storageOK=false; }
     syncStatus='Diselaraskan dengan awan';
     render();
@@ -292,7 +295,7 @@ async function syncWithCloud({notifyOnDone=false}={}) {
 function showPage(nextPage, selectedDomain) {
   if (page!=='Overview') pageDomains[page]=domain;
   page=nextPage;
-  domain=page==='Overview'?'':selectedDomain??pageDomains[page]??'';
+  domain=page==='Overview'||page==='Works'?'':selectedDomain??pageDomains[page]??'';
   selectedSubfolder='';
   render();
   window.scrollTo(0,0);
@@ -316,7 +319,7 @@ function bottomNavigation() {
 }
 
 function moreNavigation() {
-  openDialog('Lagi','<div class="dialog-body more-nav"><nav class="more-nav" aria-label="Menu tambahan">'+pageLinks(['Events','Reminders',...secondaryPages,'Works'],true)+'</nav><h3 class="eyebrow">Kumpulan</h3><nav class="more-nav" aria-label="Kumpulan">'+domainLinks(true)+'</nav>'+profileBlock(true)+'</div>');
+  openDialog('Lagi','<div class="dialog-body more-nav"><nav class="more-nav" aria-label="Menu tambahan">'+pageLinks(['Events','Reminders',...secondaryPages,'Ideas','Works'],true)+'</nav><h3 class="eyebrow">Kumpulan</h3><nav class="more-nav" aria-label="Kumpulan">'+domainLinks(true)+'</nav>'+profileBlock(true)+'</div>');
 }
 
 function domainLinks(inDialog=false) {
@@ -338,14 +341,14 @@ function render() {
  $('app-layout').hidden=false;
  $('bottom-nav').hidden=false;
  $('bottom-nav').innerHTML=bottomNavigation();
- $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Karya Abu Sulaim</h2><nav class="nav" aria-label="Karya Abu Sulaim">'+button('Sticky notes','data-page="Works"','note',page==='Works'?'active':'')+button('Idea rambang','data-works-category="Idea rambang"')+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
+ $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Karya Abu Sulaim</h2><nav class="nav" aria-label="Karya Abu Sulaim">'+button('Buku dan nota','data-page="Works"','book',page==='Works'?'active':'')+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
  const [moduleTitle]=modules[page];
  const title=page==='Group'?domain:moduleTitle;
  $('crumb').textContent=title;
- $('actions').innerHTML=button('<span class="search-label">Cari</span> <kbd>Ctrl K</kbd>','data-search aria-label="Cari dalam ruang kerja"','search','ghost')+(page==='Settings'?'':(page==='Notes'||page==='Knowledge'||page==='Works'||isThesis(page))?button('<span class="new-label">'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'</span>','data-add-note="'+page+'" aria-label="'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'"','plus','primary'):button('<span class="new-label">Tambah</span>','data-new="'+((page==='Planner'||page==='Events')?'event':page==='Reminders'?'reminder':'task')+'" aria-label="Tambah rekod"','plus','primary'));
+ $('actions').innerHTML=button('<span class="search-label">Cari</span> <kbd>Ctrl K</kbd>','data-search aria-label="Cari dalam ruang kerja"','search','ghost')+(page==='Settings'?'':(page==='Notes'||page==='Knowledge'||page==='Works'||page==='Ideas'||isThesis(page))?button('<span class="new-label">'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'</span>','data-add-note="'+page+'" aria-label="'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'"','plus','primary'):button('<span class="new-label">Tambah</span>','data-new="'+((page==='Planner'||page==='Events')?'event':page==='Reminders'?'reminder':'task')+'" aria-label="Tambah rekod"','plus','primary'));
  const filter='<select class="filter scope-select" id="domain-select" aria-label="Tapis mengikut kumpulan">'+selectDomain(domain,'Semua kumpulan')+'</select>';
  const recovery=recoverySource?'<div class="storage-notice" role="alert"><p>Data tersimpan tidak dapat dibaca. Salinan asal masih dikekalkan; perubahan baharu tersedia dalam sesi ini sahaja.</p>'+button('Muat turun data asal','data-export-recovery')+button('Import sandaran','data-import')+'</div>':'';
- $('main').innerHTML=recovery+'<div class="page-head"><div>'+(page==='Overview'?'<p class="eyebrow">'+html(fullDate(today))+'</p>':'')+'<h1 tabindex="-1">'+html(title)+'</h1></div>'+(page==='Overview'||page==='Settings'||isThesis(page)?'':filter)+'</div>'+({Overview:overview,Planner:planner,Events:eventsPage,Tasks:tasks,Knowledge:knowledge,Reminders:reminders,Notes:personalNotes,Master:thesisPage,PhD:thesisPage,Settings:settings,Group:groupPage,Works:worksPage}[page])();
+ $('main').innerHTML=recovery+'<div class="page-head"><div>'+(page==='Overview'?'<p class="eyebrow">'+html(fullDate(today))+'</p>':'')+'<h1 tabindex="-1">'+html(title)+'</h1></div>'+(page==='Overview'||page==='Works'||page==='Settings'||isThesis(page)?'':filter)+'</div>'+({Overview:overview,Planner:planner,Events:eventsPage,Tasks:tasks,Knowledge:knowledge,Reminders:reminders,Notes:personalNotes,Master:thesisPage,PhD:thesisPage,Settings:settings,Group:groupPage,Works:worksPage,Ideas:ideasPage}[page])();
 }
 function sorted(items,scope=page,notesMode=false){return sortItems(items,sorting[scope]||(notesMode?'date-desc':'date-asc'),notesMode);}
 function sortControl(scope=page,notesMode=false){
@@ -376,12 +379,82 @@ function addInlineTag(control){
   save('Tag ditambah');return true;
 }
 function worksPage(){
-  const categories=['',...workCategories];
-  const nav='<div class="work-categories">'+categories.map(name=>button(html(name||'Semua'),'data-works-category="'+name+'" aria-pressed="'+(!workArchived&&workCategory===name)+'"','',!workArchived&&workCategory===name?'active':'')).join('')+button('Arkib','data-work-archive-view aria-pressed="'+workArchived+'"','',workArchived?'active':'')+'</div>';
-  const items=sorted(visible(notes).filter(item=>item.kind==='Karya'&&Boolean(item.archived)===workArchived&&(!workCategory||item.category===workCategory)&&tagged(item,'Works')),'Works',true).sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned)));
-  const cards=items.map(item=>'<article class="sticky-card sticky-'+html(item.color||'yellow')+'"><div class="sticky-top"><span class="small">'+html(item.category||'Idea rambang')+'</span>'+button(item.pinned?'Lepas pin':'Pin','data-work-pin="'+html(item.id)+'" aria-pressed="'+Boolean(item.pinned)+'"','','ghost')+'</div><button class="note-card-open" data-note="'+notes.indexOf(item)+'"><strong>'+html(item.title)+'</strong><span class="note-excerpt">'+html(item.note.slice(0,400))+'</span></button>'+tagBadges(item)+'<div class="sticky-bottom"><time class="small muted">'+html(item.updatedAt?shortDate(item.updatedAt.slice(0,10)):'')+'</time>'+button(item.archived?'Pulihkan':'Arkib','data-work-archive="'+html(item.id)+'"','','ghost')+'</div></article>').join('');
-  return nav+tagNav('Works')+'<div class="board-toolbar">'+sortControl('Works',true)+button('Sticky note baharu','data-add-note="Works"','plus','primary')+'</div>'+(cards?'<div class="sticky-grid">'+cards+'</div>':blank(workArchived?'Arkib kosong.':'Tiada sticky note.'));
+  if(selectedWorkBook&&!library.books.some(book=>book.id===selectedWorkBook))selectedWorkBook='';
+  const book=library.books.find(item=>item.id===selectedWorkBook);
+  const allNotes=notes.filter(note=>note.kind==='Karya');
+  const count=id=>allNotes.filter(note=>(note.bookId||'')===id&&!note.archived).length;
+  const target=(id,title,meta='')=>'<button type="button" class="book-target'+(selectedWorkBook===id?' active':'')+'" data-open-book="'+html(id)+'" data-drop-book="'+html(id)+'" aria-pressed="'+(selectedWorkBook===id)+'">'+icon(id?'book':'note')+'<span class="book-target-text"><strong>'+html(title)+'</strong>'+(meta?'<small>'+html(meta)+'</small>':'')+'</span><span class="book-count">'+count(id)+'</span></button>';
+  const folders=[['published','Sudah diterbitkan'],['unpublished','Belum diterbitkan']].map(([status,label])=>{
+    const books=sortItems(library.books.filter(item=>item.status===status&&(!bookSubjectFilter||item.subjects.includes(bookSubjectFilter))),'title-asc');
+    return '<details class="book-shelf" open><summary>'+icon('project')+'<strong>'+label+'</strong><span class="book-count">'+books.length+'</span></summary><div class="book-shelf-list">'+books.map(item=>target(item.id,item.title,item.subjects.join(' · '))).join('')+(books.length?'':'<p class="library-empty">Tiada buku.</p>')+button('Tambah buku','data-add-book="'+status+'"','plus','ghost')+'</div></details>';
+  }).join('');
+  const libraryPanel='<aside class="book-library" aria-label="Folder buku"><div class="library-heading"><h2>Koleksi buku</h2>'+button('Bidang','data-manage-subjects','','ghost')+'</div><select class="filter" id="book-subject-filter" aria-label="Tapis buku mengikut bidang"><option value="">Semua bidang</option>'+library.subjects.map(name=>'<option'+(bookSubjectFilter===name?' selected':'')+'>'+html(name)+'</option>').join('')+'</select>'+target('','Belum ditetapkan')+folders+'</aside>';
+  const items=sorted(allNotes.filter(item=>(item.bookId||'')===selectedWorkBook&&Boolean(item.archived)===workArchived&&(!workPurpose||item.purpose===workPurpose)&&tagged(item,'Works')),'Works',true).sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned)));
+  const tabs='<div class="work-categories">'+button('Semua','data-work-purpose="" aria-pressed="'+(!workPurpose&&!workArchived)+'"','',!workPurpose&&!workArchived?'active':'')+workCategories.map(name=>button(html(name),'data-work-purpose="'+name+'" aria-pressed="'+(workPurpose===name&&!workArchived)+'"','',workPurpose===name&&!workArchived?'active':'')).join('')+button('Arkib','data-work-archive-view aria-pressed="'+workArchived+'"','',workArchived?'active':'')+'</div>';
+  const heading='<div class="book-board-title"><div><h2>'+html(book?.title||'Nota belum ditetapkan')+'</h2><div class="tag-badges">'+(book?badge(book.status==='published'?'Sudah diterbitkan':'Belum diterbitkan')+book.subjects.map(badge).join(''):'<span class="small muted">Seret nota ke buku atau gunakan pilihan Pindah.</span>')+'</div></div>'+(book?button('Sunting buku','data-edit-book="'+book.id+'"'):'')+'</div>';
+  const draft=quickWorkDrafts[selectedWorkBook||'inbox']||{};
+  const quick='<form id="quick-work-form" class="quick-work-form"><label class="sr-only" for="quick-work-text">Catatan pantas</label><textarea id="quick-work-text" name="note" data-quick-work maxlength="20000" rows="3" placeholder="Tulis catatan yang terlintas…" required>'+html(draft.note||'')+'</textarea><div class="quick-work-actions"><label>Buku<select class="filter" name="bookId" data-quick-work>'+bookOptions(draft.bookId??selectedWorkBook)+'</select></label><button type="submit" class="btn primary">Simpan catatan</button></div></form>';
+  const cards=stickyCards(items,'Works');
+  return '<div class="book-workspace">'+libraryPanel+'<section class="book-board" aria-label="Papan nota buku">'+heading+quick+tabs+tagNav('Works')+'<div class="board-toolbar">'+sortControl('Works',true)+button('Nota berformat','data-add-note="Works"','plus')+'</div>'+cards+'</section></div>';
 }
+
+function bookOptions(current=''){
+  return '<option value="">Belum ditetapkan</option>'+[['published','Sudah diterbitkan'],['unpublished','Belum diterbitkan']].map(([status,label])=>'<optgroup label="'+label+'">'+sortItems(library.books.filter(book=>book.status===status),'title-asc').map(book=>'<option value="'+book.id+'"'+(current===book.id?' selected':'')+'>'+html(book.title)+'</option>').join('')+'</optgroup>').join('');
+}
+function stickyCards(items,scope){
+  if(!items.length)return blank((scope==='Ideas'?ideasArchived:workArchived)?'Arkib kosong.':'Tiada catatan.');
+  return '<div class="sticky-grid">'+items.map(item=>'<article class="sticky-card sticky-'+html(item.color||'yellow')+'"'+(scope==='Works'?' draggable="true" data-drag-work="'+item.id+'"':'')+'><div class="sticky-top"><span class="small">'+html(scope==='Works'?item.purpose||'Catatan':'Idea rambang')+'</span><div class="inline">'+(scope==='Works'?button('⠿','data-work-drag-handle="'+item.id+'" aria-label="Seret nota '+html(item.title)+'" title="Seret ke buku"','','ghost note-drag-handle'):'')+button(item.pinned?'Lepas pin':'Pin','data-work-pin="'+item.id+'" aria-pressed="'+Boolean(item.pinned)+'"','','ghost')+'</div></div><button class="note-card-open" data-note="'+notes.indexOf(item)+'"><strong>'+html(item.title)+'</strong><span class="note-excerpt">'+html(item.note.slice(0,400))+'</span></button>'+tagBadges(item)+(scope==='Works'?'<label class="sticky-move">Pindah<select class="filter" data-move-work="'+item.id+'" aria-label="Pindahkan '+html(item.title)+'">'+bookOptions(item.bookId||'')+'</select></label>':'')+'<div class="sticky-bottom"><time class="small muted">'+html(item.updatedAt?shortDate(item.updatedAt.slice(0,10)):'')+'</time>'+button(item.archived?'Pulihkan':'Arkib','data-work-archive="'+item.id+'"','','ghost')+'</div></article>').join('')+'</div>';
+}
+function ideasPage(){
+  const items=sorted(visible(notes).filter(note=>note.kind==='Idea rambang'&&Boolean(note.archived)===ideasArchived&&tagged(note,'Ideas')),'Ideas',true).sort((a,b)=>Number(Boolean(b.pinned))-Number(Boolean(a.pinned)));
+  return '<div class="work-categories">'+button('Idea','data-ideas-archive="false" aria-pressed="'+!ideasArchived+'"','',!ideasArchived?'active':'')+button('Arkib','data-ideas-archive="true" aria-pressed="'+ideasArchived+'"','',ideasArchived?'active':'')+'</div>'+tagNav('Ideas')+'<div class="board-toolbar">'+sortControl('Ideas',true)+button('Idea baharu','data-add-note="Ideas"','plus','primary')+'</div>'+stickyCards(items,'Ideas');
+}
+function openBook(id){selectedWorkBook=id;workArchived=false;workPurpose='';if(page!=='Works')showPage('Works');else render();}
+function moveStickyNote(noteId,bookId){
+  const note=notes.find(item=>item.id===noteId&&item.kind==='Karya');
+  if(!note)return;
+  const previous=note.bookId||'';
+  if(!moveWorkNote(notes,library.books,noteId,bookId))return;
+  save('Nota dipindahkan ke '+(library.books.find(book=>book.id===bookId)?.title||'Belum ditetapkan'),()=>{moveWorkNote(notes,library.books,noteId,previous);});
+}
+function bookForm(id,status='unpublished'){
+  const item=library.books.find(book=>book.id===id);
+  openDialog(item?'Sunting buku':'Tambah buku','<form id="book-form" class="dialog-body"><label>Tajuk buku<input name="title" value="'+html(item?.title||'')+'" maxlength="160" required autofocus></label><label>Status penerbitan<select name="status"><option value="unpublished"'+((item?.status||status)==='unpublished'?' selected':'')+'>Belum diterbitkan</option><option value="published"'+((item?.status||status)==='published'?' selected':'')+'>Sudah diterbitkan</option></select></label><fieldset class="tag-options"><legend>Bidang · boleh pilih lebih daripada satu</legend>'+library.subjects.map(name=>'<label><input type="checkbox" name="subjects" value="'+html(name)+'"'+(item?.subjects.includes(name)?' checked':'')+'>'+html(name)+'</label>').join('')+'</fieldset><label>Bidang baharu<input name="newSubject" maxlength="48" placeholder="Pilihan"></label><div class="dialog-actions">'+(item?button('Padam folder','data-delete-book="'+item.id+'"','','left'):'')+button('Batal','data-close')+'<button type="submit" class="btn primary">Simpan buku</button></div></form>');
+  const form=$('book-form');
+  form.elements.title.focus();
+  form.addEventListener('input',event=>event.target.setCustomValidity?.(''));
+  form.addEventListener('submit',event=>{
+    event.preventDefault();
+    const title=form.elements.title.value.trim();
+    if(!title||library.books.some(book=>book.id!==item?.id&&book.title.toLowerCase()===title.toLowerCase())){form.elements.title.setCustomValidity('Tajuk kosong atau sudah digunakan.');form.elements.title.reportValidity();return;}
+    const subjects=new FormData(form).getAll('subjects');
+    const extra=form.elements.newSubject.value.trim();
+    if(extra){const canonical=library.subjects.find(name=>name.toLowerCase()===extra.toLowerCase())||extra;if(!library.subjects.includes(canonical))library.subjects.push(canonical);subjects.push(canonical);}
+    const now=new Date().toISOString();
+    const values={...item,id:item?.id||'book-'+crypto.randomUUID(),title,status:form.elements.status.value,subjects:cleanTagNames(subjects),createdAt:item?.createdAt||now,updatedAt:now};
+    if(item)library.books[library.books.indexOf(item)]=values;else library.books.push(values);
+    selectedWorkBook=values.id;bookSubjectFilter='';workPurpose='';workArchived=false;
+    $('modal').close();save('Buku disimpan');
+  });
+}
+function manageSubjects(){
+  openDialog('Urus bidang buku','<div class="dialog-body">'+library.subjects.map((name,index)=>'<div class="row"><strong class="row-main">'+html(name)+'</strong>'+button('Sunting','data-edit-subject="'+index+'" aria-label="Sunting bidang '+html(name)+'"')+button('Padam','data-delete-subject="'+index+'" aria-label="Padam bidang '+html(name)+'"')+'</div>').join('')+button('Tambah bidang','data-add-subject','plus')+'</div>');
+}
+function subjectForm(index){
+  const previous=Number.isInteger(index)?library.subjects[index]:null;
+  openDialog(previous?'Sunting bidang':'Tambah bidang','<form class="dialog-body" id="subject-form"><label>Nama bidang<input name="subject" value="'+html(previous||'')+'" maxlength="48" required autofocus></label><div class="dialog-actions">'+button('Batal','data-close')+'<button type="submit" class="btn primary">Simpan bidang</button></div></form>');
+  const form=$('subject-form'),field=form.elements.subject;
+  field.focus();field.addEventListener('input',()=>field.setCustomValidity(''));
+  form.addEventListener('submit',event=>{
+    event.preventDefault();const name=field.value.trim();
+    try{if(previous!==null)changeBookSubject(library,previous,name);else{if(!name||library.subjects.some(value=>value.toLowerCase()===name.toLowerCase()))throw new Error('Nama bidang kosong atau sudah digunakan.');library.subjects.push(name);}}
+    catch(error){field.setCustomValidity(error.message);field.reportValidity();return;}
+    if(bookSubjectFilter===previous)bookSubjectFilter=name;
+    $('modal').close();save('Bidang disimpan');
+  });
+}
+function persistQuickWorkDraft(){try{localStorage.setItem('khuttah-book-capture-v1',JSON.stringify(quickWorkDrafts));}catch{}}
+function captureQuickWorkDraft(form){quickWorkDrafts[selectedWorkBook||'inbox']={note:form.elements.note.value,bookId:form.elements.bookId.value};persistQuickWorkDraft();}
 function dayCreateDialog(day){
   openDialog(fullDate(day),'<div class="dialog-body quick-create">'+Object.entries(types).map(([type,label])=>button('Tambah '+label.toLowerCase(),'data-new="'+type+'" data-date="'+day+'"',type==='task'?'task':type==='event'?'calendar':'bell')).join('')+button('Lihat agenda hari','data-open-agenda="'+day+'"','','ghost')+'</div>');
 }
@@ -532,7 +605,7 @@ function tagNav(scope) {
 }
 
 function tagOptions(scope,selected=[],hidden=false) {
-  return '<fieldset class="tag-options" data-inline-tags="'+scope+'" id="'+(scope==='Events'?'event-tags':scope==='Notes'?'note-tags':scope==='Works'?'work-tags':'knowledge-tags')+'" '+(hidden?'hidden':'')+'><legend>Tag</legend>'+tags[scope].map(name=>'<label><input type="checkbox" name="tags" value="'+html(name)+'"'+(selected.includes(name)?' checked':'')+'>'+html(name)+'</label>').join('')+'<div class="inline tag-create"><input data-tag-input name="newTag" aria-label="Tag baharu" placeholder="Tag baharu" maxlength="48" autocomplete="off"><button type="button" class="btn" data-inline-tag="'+scope+'">Tambah</button></div></fieldset>';
+  return '<fieldset class="tag-options" data-inline-tags="'+scope+'" id="'+(scope==='Events'?'event-tags':scope==='Notes'?'note-tags':scope==='Works'?'work-tags':scope==='Ideas'?'idea-tags':'knowledge-tags')+'" '+(hidden?'hidden':'')+'><legend>Tag</legend>'+tags[scope].map(name=>'<label><input type="checkbox" name="tags" value="'+html(name)+'"'+(selected.includes(name)?' checked':'')+'>'+html(name)+'</label>').join('')+'<div class="inline tag-create"><input data-tag-input name="newTag" aria-label="Tag baharu" placeholder="Tag baharu" maxlength="48" autocomplete="off"><button type="button" class="btn" data-inline-tag="'+scope+'">Tambah</button></div></fieldset>';
 }
 
 function tagForm(scope,index) {
@@ -618,36 +691,35 @@ function moveThesisNote(index,chapter) {
  if (chapter) selectedChapter[page]=chapter;
  save(chapter?'Nota dipindahkan ke Bab '+chapter:'Nota dipindahkan ke Catatan Awal');
 }
-function noteForm(scope,index,chapter=0) {
+function noteForm(scope,index,chapter=0){
   const item=notes[index];
   const initial=item||{title:'',note:'',noteHtml:'',domain,kind:'Rujukan'};
-  const personal=scope==='Notes',thesis=isThesis(scope),work=scope==='Works',tagScope=thesis?'Notes':scope;
-  const kindField=personal||thesis||work?'':'<label>Jenis<select name="kind">'+['Rujukan','Penyelidikan'].map(kind=>'<option'+(kind===initial.kind?' selected':'')+'>'+kind+'</option>').join('')+'</select></label>';
-  const locationField=thesis?'<label>Bab<select name="chapter">'+chapterOptions(item?.chapter??chapter)+'</select></label>':'<label>Kumpulan<select name="domain">'+selectDomain(initial.domain,'Tanpa kumpulan')+'</select></label>';
+  const personal=scope==='Notes',thesis=isThesis(scope),work=scope==='Works',idea=scope==='Ideas',sticky=work||idea,tagScope=thesis?'Notes':scope;
+  const initialBook=item?item.bookId||'':selectedWorkBook;
+  const book=library.books.find(value=>value.id===initialBook);
+  const kindField=personal||thesis||sticky?'':'<label>Jenis<select name="kind">'+['Rujukan','Penyelidikan'].map(kind=>'<option'+(kind===initial.kind?' selected':'')+'>'+kind+'</option>').join('')+'</select></label>';
+  const locationField=work?'<input name="domain" type="hidden" value="'+html(initial.domain||'')+'"><label>Buku<select name="bookId">'+bookOptions(initialBook)+'</select></label>':thesis?'<label>Bab<select name="chapter">'+chapterOptions(item?.chapter??chapter)+'</select></label>':'<label>Kumpulan<select name="domain">'+selectDomain(initial.domain,'Tanpa kumpulan')+'</select></label>';
   const subfolderField=personal?'<label id="note-subfolder-field" '+(initial.domain?'':'hidden')+'>Subfolder<select name="subfolder">'+subfolderOptions(initial.domain,item?.subfolder??selectedSubfolder,'Tanpa subfolder')+'</select></label>':'';
-  const workFields=work?'<label>Kategori<select name="category">'+workCategories.map(name=>'<option'+(name===(item?.category||workCategory||'Idea rambang')?' selected':'')+'>'+name+'</option>').join('')+'</select></label><label>Warna<select name="color">'+Object.entries(workColors).map(([value,name])=>'<option value="'+value+'"'+(value===(item?.color||'yellow')?' selected':'')+'>'+name+'</option>').join('')+'</select></label><label class="check-label"><input type="checkbox" name="pinned"'+(item?.pinned?' checked':'')+'> Pin nota</label>':'';
-  openDialog(work?'Sticky note':item?'Sunting nota':'Nota baharu','<form class="dialog-body note-form" id="personal-note-form"><label class="note-title-label"><span class="sr-only">Tajuk</span><input class="note-title-input" name="title" placeholder="Tajuk" required maxlength="120" value="'+html(initial.title)+'" autofocus></label><details class="note-details"'+(work?' open':'')+'><summary>Kumpulan dan tag</summary><div class="form-grid">'+kindField+locationField+subfolderField+workFields+'</div>'+tagOptions(tagScope,item?.tags||[tagSelection[tagScope]])+'</details><div class="editor-toolbar" data-editor-toolbar role="toolbar" aria-label="Format nota"></div><div class="note-paper"><div data-note-editor></div></div><textarea name="note" hidden>'+html(initial.note)+'</textarea><textarea name="noteHtml" hidden>'+html(initial.noteHtml||'')+'</textarea><p id="note-error" class="form-error" role="alert"></p><div class="dialog-actions note-footer">'+(item?button('Padam','data-delete-note="'+index+'"','','left'):'')+button('Besarkan','data-expand-note')+button('Tutup','data-close')+'<button class="btn primary" type="submit">Simpan nota</button></div></form>');
+  const purpose=item?.purpose||(book?.status==='published'?'Pembetulan':book?'Idea buku':'Catatan');
+  const workFields=(work?'<label>Jenis catatan<select name="purpose">'+workCategories.map(name=>'<option'+(name===purpose?' selected':'')+'>'+name+'</option>').join('')+'</select></label>':'')+(sticky?'<label>Warna<select name="color">'+Object.entries(workColors).map(([value,name])=>'<option value="'+value+'"'+(value===(item?.color||'yellow')?' selected':'')+'>'+name+'</option>').join('')+'</select></label><label class="check-label"><input type="checkbox" name="pinned"'+(item?.pinned?' checked':'')+'> Pin nota</label>':'');
+  openDialog(work?'Nota karya':idea?'Idea rambang':item?'Sunting nota':'Nota baharu','<form class="dialog-body note-form" id="personal-note-form"><label class="note-title-label"><span class="sr-only">Tajuk</span><input class="note-title-input" name="title" placeholder="'+(sticky?'Tajuk (pilihan)':'Tajuk')+'" '+(sticky?'':'required ')+'maxlength="120" value="'+html(initial.title)+'" autofocus></label><details class="note-details"'+(sticky?' open':'')+'><summary>'+(work?'Buku dan jenis catatan':'Kumpulan dan tag')+'</summary><div class="form-grid">'+kindField+locationField+subfolderField+workFields+'</div>'+tagOptions(tagScope,item?.tags||[tagSelection[tagScope]])+'</details><div class="editor-toolbar" data-editor-toolbar role="toolbar" aria-label="Format nota"></div><div class="note-paper"><div data-note-editor></div></div><textarea name="note" hidden>'+html(initial.note)+'</textarea><textarea name="noteHtml" hidden>'+html(initial.noteHtml||'')+'</textarea><p id="note-error" class="form-error" role="alert"></p><div class="dialog-actions note-footer">'+(item?button('Padam','data-delete-note="'+index+'"','','left'):'')+button('Besarkan','data-expand-note')+button('Tutup','data-close')+'<button class="btn primary" type="submit">Simpan nota</button></div></form>');
   const form=$('personal-note-form');
-  if(personal)form.elements.domain.addEventListener('change',()=>{
-    const folder=form.elements.domain.value;
-    $('note-subfolder-field').hidden=!folder;
-    form.elements.subfolder.innerHTML=subfolderOptions(folder,'','Tanpa subfolder');
-  });
-  form.addEventListener('input',event=>{ event.target.setCustomValidity?.(''); $('note-error').textContent=''; });
+  if(personal)form.elements.domain.addEventListener('change',()=>{const folder=form.elements.domain.value;$('note-subfolder-field').hidden=!folder;form.elements.subfolder.innerHTML=subfolderOptions(folder,'','Tanpa subfolder');});
+  form.addEventListener('input',event=>{event.target.setCustomValidity?.('');$('note-error').textContent='';});
   drafts.attach(form,'note:'+scope+':'+(item?.id||'new'));
-  noteEditor=createNoteEditor(form);
-  form.elements.title.focus();
+  noteEditor=createNoteEditor(form);form.elements.title.focus();
   form.addEventListener('submit',event=>{
     event.preventDefault();
     if(form.elements.newTag?.value.trim()&&!addInlineTag(form.querySelector('[data-inline-tag]')))return;
     noteEditor.sync();
-    const title=form.elements.title.value.trim(),note=form.elements.note.value.trim();
-    if(!title||!note) { $('note-error').textContent=!title?'Masukkan tajuk.':'Masukkan catatan.'; if(!title)form.elements.title.focus();else noteEditor.focus();return; }
+    const note=form.elements.note.value.trim(),title=form.elements.title.value.trim()||(sticky?note.split('\n')[0].slice(0,120):'');
+    if(!title||!note){$('note-error').textContent=!title?'Masukkan tajuk.':'Masukkan catatan.';if(!title)form.elements.title.focus();else noteEditor.focus();return;}
     const now=new Date().toISOString();
-    const values={...item,id:item?.id||'n-'+crypto.randomUUID(),title,note,noteHtml:form.elements.noteHtml.value,domain:thesis?'':form.elements.domain.value,kind:thesis?'Nota tesis':work?'Karya':personal?'Nota peribadi':form.elements.kind.value,tags:cleanTagNames(new FormData(form).getAll('tags')),createdAt:item?item.createdAt||'':now,updatedAt:now};
+    const values={...item,id:item?.id||'n-'+crypto.randomUUID(),title,note,noteHtml:form.elements.noteHtml.value,domain:thesis?'':form.elements.domain.value,kind:thesis?'Nota tesis':work?'Karya':idea?'Idea rambang':personal?'Nota peribadi':form.elements.kind.value,tags:cleanTagNames(new FormData(form).getAll('tags')),createdAt:item?item.createdAt||'':now,updatedAt:now};
     if(personal)values.subfolder=form.elements.subfolder.value;
-    if(work)Object.assign(values,{category:form.elements.category.value,color:form.elements.color.value,pinned:form.elements.pinned.checked,archived:Boolean(item?.archived)});
-    if(thesis) { values.thesis=scope;values.chapter=Number(form.elements.chapter.value);if(page===scope&&values.chapter)selectedChapter[scope]=values.chapter; }
+    if(sticky)Object.assign(values,{color:form.elements.color.value,pinned:form.elements.pinned.checked,archived:Boolean(item?.archived)});
+    if(work)Object.assign(values,{bookId:form.elements.bookId.value,purpose:form.elements.purpose.value});
+    if(thesis){values.thesis=scope;values.chapter=Number(form.elements.chapter.value);if(page===scope&&values.chapter)selectedChapter[scope]=values.chapter;}
     if(item)notes[index]=values;else notes.push(values);
     drafts.clear();$('modal').close();save('Nota disimpan');
   });
@@ -710,9 +782,9 @@ function importDialog() {
   if (!incoming) return;
   try { localStorage.setItem(key,JSON.stringify(incoming)); }
   catch { $('import-error').textContent='Storan pelayar tidak dapat ditulis. Data semasa belum diganti.'; return; }
-  ({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=incoming);
+  ({records,domains,projects,notes,tags,subfolders,library,demoCleanupVersion}=incoming);
   recoverySource=null;
-  drafts.clearAll();
+  drafts.clearAll();quickWorkDrafts={};persistQuickWorkDraft();selectedWorkBook='';bookSubjectFilter='';workPurpose='';
   selectedSubfolder='';
   selectedChapter.Master=1;
   selectedChapter.PhD=1;
@@ -847,9 +919,20 @@ document.addEventListener('click',e=>{
  if('editTag' in data){tagForm(data.tagOwner,Number(data.editTag));return;}
  if('deleteTag' in data){const name=tags[data.tagOwner][Number(data.deleteTag)];openDialog('Padam tag '+name+'?','<div class="dialog-body"><p>Tag akan dibuang daripada catatan berkaitan. Catatan dikekalkan.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam','data-confirm-delete-tag="'+data.deleteTag+'" data-tag-owner="'+data.tagOwner+'"','','primary')+'</div></div>');return;}
  if('confirmDeleteTag' in data){const scope=data.tagOwner,name=tags[scope][Number(data.confirmDeleteTag)];changeTag(currentState(),scope,name,null);drafts.changeTag(scope,name,null);if(tagSelection[scope]===name)tagSelection[scope]='';$('modal').close();save('Tag dipadam');return;}
- if('worksCategory' in data){workCategory=data.worksCategory;workArchived=false;if(page!=='Works')showPage('Works');else render();return;}
- if('workArchiveView' in data){workCategory='';workArchived=true;render();return;}
- if('workPin' in data||'workArchive' in data){const item=notes.find(note=>note.kind==='Karya'&&note.id===(data.workPin||data.workArchive));if(item){if('workPin' in data)item.pinned=!item.pinned;else item.archived=!item.archived;item.updatedAt=new Date().toISOString();save('Nota dikemas kini');}return;}
+ if('openBook' in data){openBook(data.openBook);return;}
+ if('workPurpose' in data){workPurpose=data.workPurpose;workArchived=false;render();return;}
+ if('ideasArchive' in data){ideasArchived=data.ideasArchive==='true';render();return;}
+ if('addBook' in data){bookForm(undefined,data.addBook);return;}
+ if('editBook' in data){bookForm(data.editBook);return;}
+ if('deleteBook' in data){const book=library.books.find(item=>item.id===data.deleteBook);if(!book)return;openDialog('Padam folder '+book.title+'?','<div class="dialog-body"><p>Catatan buku akan dipindahkan ke Belum ditetapkan.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam folder','data-confirm-delete-book="'+book.id+'"','','primary')+'</div></div>');return;}
+ if('confirmDeleteBook' in data){const index=library.books.findIndex(item=>item.id===data.confirmDeleteBook);if(index<0)return;const [book]=library.books.splice(index,1),affected=notes.filter(item=>item.kind==='Karya'&&item.bookId===book.id);for(const note of affected)note.bookId='';if(selectedWorkBook===book.id)selectedWorkBook='';$('modal').close();save('Folder dipadam; catatan dikekalkan',()=>{if(!library.books.some(item=>item.id===book.id))library.books.splice(index,0,book);for(const note of affected){const current=notes.find(item=>item.id===note.id);if(current&&current.kind==='Karya'&&!current.bookId)current.bookId=book.id;}});return;}
+ if('manageSubjects' in data){manageSubjects();return;}
+ if('addSubject' in data){subjectForm();return;}
+ if('editSubject' in data){subjectForm(Number(data.editSubject));return;}
+ if('deleteSubject' in data){const name=library.subjects[Number(data.deleteSubject)];openDialog('Padam bidang '+name+'?','<div class="dialog-body"><p>Label bidang akan dibuang daripada buku berkaitan. Buku dan catatan dikekalkan.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam','data-confirm-delete-subject="'+data.deleteSubject+'"','','primary')+'</div></div>');return;}
+ if('confirmDeleteSubject' in data){const name=library.subjects[Number(data.confirmDeleteSubject)];changeBookSubject(library,name,null);if(bookSubjectFilter===name)bookSubjectFilter='';$('modal').close();save('Bidang dipadam');return;}
+ if('workArchiveView' in data){workPurpose='';workArchived=true;render();return;}
+ if('workPin' in data||'workArchive' in data){const item=notes.find(note=>['Karya','Idea rambang'].includes(note.kind)&&note.id===(data.workPin||data.workArchive));if(item){if('workPin' in data)item.pinned=!item.pinned;else item.archived=!item.archived;item.updatedAt=new Date().toISOString();save('Nota dikemas kini');}return;}
  if ('installApp' in data) { void triggerInstall(); return; }
  if ('dismissInstall' in data) { installDismissed=true; renderInstallBanner(); return; }
  if ('authMode' in data) { authMode=data.authMode; renderAuthGate(); return; }
@@ -857,8 +940,8 @@ document.addEventListener('click',e=>{
  if ('signOut' in data) {
   void (async()=>{
    await cloud.signOut();
-   ({records,domains,projects,notes,tags,subfolders}=emptyState());
-   drafts.clearAll();
+   ({records,domains,projects,notes,tags,subfolders,library}=emptyState());
+   drafts.clearAll();quickWorkDrafts={};persistQuickWorkDraft();selectedWorkBook='';
    try { localStorage.removeItem(key); } catch {}
    lockWorkspace();
    notify('Anda telah log keluar');
@@ -967,6 +1050,8 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
  const control=e.target;
+ if('moveWork' in control.dataset){moveStickyNote(control.dataset.moveWork,control.value);return;}
+ if(control.id==='book-subject-filter'){bookSubjectFilter=control.value;const book=library.books.find(item=>item.id===selectedWorkBook);if(bookSubjectFilter&&book&&!book.subjects.includes(bookSubjectFilter))selectedWorkBook='';render();$('book-subject-filter').focus();return;}
  if('sortScope' in control.dataset){sorting[control.dataset.sortScope]=control.value;try{localStorage.setItem('khuttah-sorting-v1',JSON.stringify(sorting));}catch{}render();document.querySelector('[data-sort-scope="'+control.dataset.sortScope+'"]').focus();return;}
  if(control.id==='task-date-filter'){taskDates=control.value;render();$('task-date-filter').focus();return;}
  if ('moveNote' in control.dataset){ moveThesisNote(Number(control.dataset.moveNote),Number(control.value)); return; }
@@ -1008,6 +1093,17 @@ document.addEventListener('drop',event=>{
  const index=draggedNote;
  draggedNote=null;
  moveThesisNote(index,Number(target.dataset.dropChapter));
+});
+installBookDragging(moveStickyNote);
+document.addEventListener('input',event=>{if(event.target.matches('[data-quick-work]')){event.target.setCustomValidity?.('');captureQuickWorkDraft(event.target.closest('form'));}});
+document.addEventListener('change',event=>{if(event.target.matches('select[data-quick-work]'))captureQuickWorkDraft(event.target.closest('form'));});
+document.addEventListener('submit',event=>{
+ const form=event.target;if(form.id!=='quick-work-form')return;
+ event.preventDefault();const note=form.elements.note.value.trim();
+ if(!note){form.elements.note.setCustomValidity('Masukkan catatan.');form.elements.note.reportValidity();return;}
+ const bookId=form.elements.bookId.value,book=library.books.find(item=>item.id===bookId),now=new Date().toISOString();
+ notes.push({id:'n-'+crypto.randomUUID(),kind:'Karya',title:note.split('\n')[0].slice(0,120),note,noteHtml:'',domain:'',tags:[],bookId:book?.id||'',purpose:book?.status==='published'?'Pembetulan':book?'Idea buku':'Catatan',color:'yellow',pinned:false,archived:false,createdAt:now,updatedAt:now});
+ delete quickWorkDrafts[selectedWorkBook||'inbox'];persistQuickWorkDraft();save(book?'Catatan disimpan dalam '+book.title:'Catatan disimpan');$('quick-work-text')?.focus();
 });
 document.addEventListener('keydown',e=>{
  if(e.key==='Enter'&&e.target.matches('[data-tag-input]')){e.preventDefault();addInlineTag(e.target.closest('fieldset').querySelector('[data-inline-tag]'));return;}

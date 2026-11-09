@@ -6,7 +6,7 @@ export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_wcqOXIYjJ0SMGA90CzCmLg_Z
 export const SESSION_STORAGE_KEY = 'khuttah-auth-session-v1';
 export const SYNC_META_KEY = 'khuttah-cloud-meta-v1';
 
-const defaultTags = {Notes: [], Knowledge: [], Events: [], Works: []};
+const defaultTags = {Notes: [], Knowledge: [], Events: [], Works: [], Ideas: []};
 
 function parseError(payload, status) {
   if (!payload || typeof payload !== 'object') return `Ralat pelayan (${status}).`;

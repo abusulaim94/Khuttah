@@ -1,4 +1,4 @@
-import {cleanTagNames, tagScopeOf, tagScopes, workCategories, workColors} from './workspace.js';
+import {cleanTagNames, tagScopeOf, tagScopes, workCategories, workColors, initialLibrary} from './workspace.js';
 
 export const BACKUP_FORMAT = 'khuttah-backup';
 export const BACKUP_VERSION = 1;
@@ -21,6 +21,25 @@ export function validDate(value) {
 
 export function normaliseState(value) {
   object(value, 'sandaran');
+  const rawLibrary = value.library == null ? initialLibrary() : object(value.library, 'koleksi buku');
+  const bookIds = new Set();
+  const library = {
+    version: 1,
+    subjects: cleanTagNames(names(rawLibrary.subjects ?? [], 'bidang buku', 48)),
+    books: list(rawLibrary.books, 'buku').map(entry => {
+      object(entry, 'buku');
+      const bookId = id(entry.id);
+      if (bookIds.has(bookId)) fail('ID buku berulang');
+      bookIds.add(bookId);
+      const title = text(entry.title, 'tajuk buku', 160).trim();
+      if (!title || !['published', 'unpublished'].includes(entry.status)) fail('buku');
+      return {...entry, id: bookId, title, status: entry.status, subjects: cleanTagNames(names(entry.subjects ?? [], 'bidang buku', 48))};
+    }),
+  };
+  for (const book of library.books) {
+    library.subjects = cleanTagNames([...library.subjects, ...book.subjects]);
+    book.subjects = book.subjects.map(subject => library.subjects.find(name => name.toLowerCase() === subject.toLowerCase()));
+  }
   const recordIds = new Set();
   const noteIds = new Set();
   const records = list(value.records, 'rekod').map(entry => {
@@ -48,7 +67,7 @@ export function normaliseState(value) {
     const noteId = entry.id == null ? `n-${crypto.randomUUID()}` : id(entry.id);
     if (noteIds.has(noteId)) fail('ID nota berulang');
     noteIds.add(noteId);
-    if (!['Rujukan', 'Penyelidikan', 'Nota peribadi', 'Nota tesis', 'Karya'].includes(entry.kind)) fail('jenis nota');
+    if (!['Rujukan', 'Penyelidikan', 'Nota peribadi', 'Nota tesis', 'Karya', 'Idea rambang'].includes(entry.kind)) fail('jenis nota');
     if (entry.kind === 'Nota tesis' && (!['Master', 'PhD'].includes(entry.thesis) || !Number.isInteger(entry.chapter) || entry.chapter < 0 || entry.chapter > 5)) fail('bab tesis');
     return {
       ...entry, id: noteId, title: text(entry.title, 'tajuk nota', 120),
@@ -56,10 +75,13 @@ export function normaliseState(value) {
       subfolder: optionalText(entry.subfolder, 'subfolder nota', 48), tags: cleanTagNames(names(entry.tags ?? [], 'tag nota', 48)),
       noteHtml: optionalText(entry.noteHtml, 'format nota'),
       createdAt: timestamp(entry.createdAt), updatedAt: timestamp(entry.updatedAt),
-      ...(entry.kind === 'Karya' ? {
-        category: workCategories.includes(entry.category) ? entry.category : 'Idea rambang',
+      ...(entry.kind === 'Karya' || entry.kind === 'Idea rambang' ? {
         color: Object.hasOwn(workColors, entry.color) ? entry.color : 'yellow',
         pinned: Boolean(entry.pinned), archived: Boolean(entry.archived),
+      } : {}),
+      ...(entry.kind === 'Karya' ? {
+        bookId: entry.bookId == null || entry.bookId === '' ? '' : bookIds.has(id(entry.bookId)) ? entry.bookId : '',
+        purpose: workCategories.includes(entry.purpose) ? entry.purpose : 'Catatan',
       } : {}),
     };
   });
@@ -76,7 +98,7 @@ export function normaliseState(value) {
     entry.tags = entry.tags.map(name => tags[scope].find(tag => tag.toLocaleLowerCase('ms') === name.toLocaleLowerCase('ms')));
   }
   return {
-    records, notes, projects, tags,
+    records, notes, projects, tags, library,
     domains: [...new Set(names(value.domains, 'kumpulan', 45))],
     subfolders: list(value.subfolders ?? [], 'subfolder').map(entry => {
       object(entry, 'subfolder');
