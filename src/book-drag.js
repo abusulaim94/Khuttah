@@ -58,5 +58,5 @@ export function installBookDragging(move) {
     clear();
     if (moved && target) move(noteId, target.dataset.dropBook);
   });
-  document.addEventListener('pointercancel', clear);
+  document.addEventListener('pointercancel', event => { if (pointer?.id === event.pointerId) clear(); });
 }

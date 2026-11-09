@@ -47,7 +47,11 @@ Fail prototaip dikekalkan untuk rujukan dan eksport data lama. Perubahan baharu 
 - Tugasan boleh disimpan tanpa tarikh, ditapis secara berasingan, kemudian diberikan tarikh atau ditunda.
 - Nota dalam menu utama, dengan tajuk, bold, italic, underline, senarai, checklist, petikan dan undo/redo. Format disimpan bersama teks biasa dan boleh dipulihkan daripada draf atau sandaran.
 - Tag boleh ditambah semasa menulis, dinamakan semula dan dipadam. Suntingan tag turut mengemas kini catatan dan draf berkaitan.
-- Karya Abu Sulaim menggunakan sticky notes berwarna dengan pin dan arkib. Kategori awal: Idea rambang, Draf, Dalam proses dan Siap.
+- Idea rambang mempunyai menu tersendiri untuk catatan bebas, berasingan daripada Karya.
+- Karya Abu Sulaim mempunyai folder Sudah diterbitkan dan Belum diterbitkan. Empat buku diterbitkan disediakan: Nota Mudah Makhraj & Sifat Huruf, Kesimpulan Makhraj & Sifat Huruf, Tajwid al-Nasyr dan Akhlaq Hamalat al-Quran.
+- Setiap buku mempunyai papan sticky notes untuk pembetulan, idea cetakan seterusnya, idea buku dan catatan. Nota pantas boleh disimpan tanpa tajuk atau buku dalam Belum ditetapkan, kemudian diseret atau dipindahkan melalui pilihan Pindah. Pemegang seret menyokong sentuhan tablet.
+- Buku boleh dikelaskan dalam lebih daripada satu bidang. Bidang awal ialah Tajwid, Akhlak, Terjemahan dan Sirah; nama bidang boleh ditambah, disunting dan dipadam. Status penerbitan boleh diubah tanpa memisahkan nota daripada buku.
+- Nota Karya lama kekal sebagai nota belum ditetapkan. Memadam folder buku memindahkan catatannya ke Belum ditetapkan dan menyediakan Buat asal; koleksi yang sengaja dikosongkan tidak diisi semula secara automatik.
 - Susunan A–Z, Z–A dan tarikh pada senarai. Nota menggunakan tarikh kemas kini; nota lama tanpa metadata tarikh diletakkan selepas nota yang mempunyai tarikh.
 - Penapis kumpulan disimpan mengikut halaman. Menu kumpulan membuka halaman kumpulan; Ringkasan sentiasa merangkumi semua kumpulan.
 - Paparan tablet landscape menggunakan bar sisi dan ruang kandungan lebar; telefon serta tablet portrait menggunakan navigasi bawah.
@@ -69,6 +73,7 @@ src/storage.js                 Format, pengesahan dan sandaran data
 src/drafts.js                  Penyimpanan serta pemulihan draf borang
 src/editor.js                  Editor nota Tiptap dan sanitasi HTML
 src/workspace.js               Tag, sorting, deadline dan kategori karya
+src/book-drag.js               Seret nota ke buku dengan tetikus atau sentuhan
 src/cleanup.js                 Pembersihan sekali bagi data demo lama
 src/supabase.js                Pengesahan log masuk dan penyelarasan awan Supabase
 supabase/schema.sql            Skema jadual dan polisi RLS Postgres untuk Supabase
@@ -76,6 +81,7 @@ tests/storage.test.js          Ujian sandaran, data lama dan data tidak sah
 tests/cleanup.test.js          Ujian pembersihan demo dan perlindungan data pengguna
 tests/supabase.test.js         Ujian log masuk, pembaharuan sesi dan penyelarasan awan
 tests/workspace.test.js        Ujian tugasan tanpa tarikh, nota berformat, tag dan deadline
+tests/books.test.js            Ujian migrasi buku, bidang, pindah nota dan sandaran
 tests/browser/workspace.spec.js Ujian aliran pengguna dan paparan 320–1440 piksel
 public/favicon.svg            Ikon aplikasi
 .github/workflows/check.yml   Ujian, build dan penerbitan GitHub Pages

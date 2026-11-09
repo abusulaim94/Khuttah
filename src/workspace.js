@@ -29,6 +29,7 @@ export function changeBookSubject(library, previous, next) {
   for (const book of library.books) book.subjects = cleanTagNames(book.subjects.flatMap(subject => subject === previous ? name === null ? [] : [name] : [subject]));
 }
 const collator = new Intl.Collator('ms', {sensitivity: 'base', numeric: true});
+export const noteDateLabel = value => new Intl.DateTimeFormat('ms-MY', {day: 'numeric', month: 'short', timeZone: 'Asia/Kuala_Lumpur'}).format(new Date(value));
 
 export function cleanTagNames(values) {
   const seen = new Set();
