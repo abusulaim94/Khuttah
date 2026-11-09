@@ -121,3 +121,35 @@ test('pushState menghantar upsert atomik mengikut user_id dan membersihkan statu
   assert.equal(storage.getItem(SESSION_STORAGE_KEY), null);
   assert.ok(storage.getItem(SYNC_META_KEY));
 });
+
+test('signUp menyokong pengesahan emel dan log masuk terus apabila auto-confirm aktif', async () => {
+  const storage = memoryStorage();
+  let autoConfirm = false;
+  const cloud = createCloudController({
+    url: 'https://example.supabase.co',
+    publishableKey: 'sb_publishable_test',
+    storage,
+    fetchImpl: async (_url, options) => {
+      const body = JSON.parse(options.body);
+      if (autoConfirm) {
+        return new Response(JSON.stringify({
+          access_token: 'tok-signup',
+          refresh_token: 'ref-signup',
+          expires_in: 3600,
+          user: {id: 'u-new', email: body.email},
+        }), {status: 200});
+      }
+      return new Response(JSON.stringify({user: {id: 'u-new', email: body.email}}), {status: 200});
+    },
+  });
+
+  await assert.rejects(() => cloud.signUp('abu@example.com', '123'), /sekurang-kurangnya 6 aksara/);
+  const pending = await cloud.signUp('abu@example.com', 'rahsia123');
+  assert.equal(pending.confirmationRequired, true);
+  assert.equal(cloud.getSession(), null);
+
+  autoConfirm = true;
+  const active = await cloud.signUp('abu@example.com', 'rahsia123');
+  assert.equal(active.confirmationRequired, false);
+  assert.equal(cloud.getSession()?.user.id, 'u-new');
+});

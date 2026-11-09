@@ -10,6 +10,9 @@ let recoverySource=null;
 let syncStatus='Menyemak penyelarasan awan…';
 let syncError='';
 let syncBusy=false;
+let authMode='signin';
+let deferredInstallPrompt=null;
+let installDismissed=false;
 const paths = {
  note:'<path d="M5 3h14v13l-5 5H5zM14 21v-5h5M8 8h8M8 12h8"/>',
  logo:'<path d="M5 4v16M19 4 5 14m6-4 8 10"/>', home:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -142,8 +145,44 @@ function save(message,action=null) {
  notify(message+(storageOK?'':' · Perubahan tersedia dalam sesi ini sahaja.'),action);
  if (!recoverySource&&cloud.getSession()) void pushToCloud();
 }
-function renderAuthGate(errorMessage='') {
+function isStandaloneApp() {
+ return Boolean(window.matchMedia?.('(display-mode: standalone)').matches||window.navigator?.standalone);
+}
+function renderInstallBanner() {
+ const banner=$('install-banner');
+ if (!banner) return;
+ if (isStandaloneApp()||installDismissed) {
+  banner.hidden=true;
+  banner.innerHTML='';
+  return;
+ }
+ const host=window.location?.hostname||'abusulaim94.github.io';
+ banner.hidden=false;
+ banner.innerHTML='<div class="install-banner-card"><div class="install-banner-main"><div class="logo install-logo">'+icon('logo')+'</div><div class="install-banner-text"><strong>Install KHUTTAH</strong><span>'+html(host)+'</span></div></div><div class="install-banner-actions"><button type="button" class="install-cta" data-install-app>Install</button><button type="button" class="install-dismiss" data-dismiss-install aria-label="Tutup makluman pemasangan">'+icon('close')+'</button></div></div>';
+}
+function installHelpDialog() {
+ openDialog('Pasang aplikasi KHUTTAH','<div class="dialog-body"><p>Pasang KHUTTAH ke skrin utama supaya ia dibuka penuh seperti aplikasi sebenar:</p><p class="small"><strong>Android (Chrome / Edge):</strong> Ketik ikon menu <strong>⋮</strong> di penjuru kanan atas pelayar, kemudian pilih <strong>Install app</strong> atau <strong>Add to Home screen</strong>.</p><p class="small"><strong>iPhone / iPad (Safari):</strong> Ketik ikon <strong>Kongsi (Share)</strong> di bahagian bawah pelayar, kemudian pilih <strong>Add to Home Screen</strong>.</p><div class="dialog-actions">'+button('Faham','data-close','','primary')+'</div></div>');
+}
+async function triggerInstall() {
+ if (deferredInstallPrompt) {
+  const promptEvent=deferredInstallPrompt;
+  deferredInstallPrompt=null;
+  try {
+   await promptEvent.prompt();
+   const choice=await promptEvent.userChoice;
+   if (choice?.outcome==='accepted') {
+    installDismissed=true;
+    renderInstallBanner();
+    notify('Aplikasi KHUTTAH sedang dipasang');
+   }
+  } catch {}
+  return;
+ }
+ installHelpDialog();
+}
+function renderAuthGate(errorMessage='',infoMessage='') {
  if ($('modal').open) $('modal').close();
+ renderInstallBanner();
  $('app-layout').hidden=true;
  $('bottom-nav').hidden=true;
  $('bottom-nav').innerHTML='';
@@ -152,18 +191,31 @@ function renderAuthGate(errorMessage='') {
  $('actions').innerHTML='';
  $('main').innerHTML='';
  $('auth-gate').hidden=false;
- $('auth-gate').innerHTML='<section class="auth-card panel"><div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><h1>Log masuk</h1><p class="muted small">Ruang kerja ini dilindungi. Log masuk untuk mengakses dan menyelaraskan data anda antara telefon dan komputer.</p><form id="login-form" class="dialog-body auth-form"><label>Emel<input type="email" name="email" autocomplete="email" required autofocus></label><label>Kata laluan<input type="password" name="password" autocomplete="current-password" required></label><p id="auth-error" class="small" role="alert">'+html(errorMessage)+'</p><button class="btn primary auth-submit" id="auth-submit" type="submit">Log masuk</button></form></section>';
+ const signup=authMode==='signup';
+ const modeSwitch='<div class="segments auth-tabs" aria-label="Mod akaun"><button type="button" data-auth-mode="signin" class="'+(signup?'':'active')+'" aria-pressed="'+(!signup)+'">Log masuk</button><button type="button" data-auth-mode="signup" class="'+(signup?'active':'')+'" aria-pressed="'+signup+'">Daftar akaun</button></div>';
+ $('auth-gate').innerHTML='<section class="auth-card panel"><div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div>'+modeSwitch+'<h1>'+(signup?'Daftar akaun':'Log masuk')+'</h1><p class="muted small">'+(signup?'Cipta akaun peribadi anda untuk menyelaraskan tugasan dan nota merentas peranti.':'Ruang kerja ini dilindungi. Log masuk untuk mengakses dan menyelaraskan data anda antara telefon dan komputer.')+'</p><form id="login-form" class="dialog-body auth-form"><label>Emel<input type="email" name="email" autocomplete="email" required autofocus></label><label>Kata laluan<input type="password" name="password" autocomplete="'+(signup?'new-password':'current-password')+'" minlength="6" required></label><p id="auth-info" class="small auth-info" role="status">'+html(infoMessage)+'</p><p id="auth-error" class="small" role="alert">'+html(errorMessage)+'</p><button class="btn primary auth-submit" id="auth-submit" type="submit">'+(signup?'Daftar akaun':'Log masuk')+'</button></form></section>';
  const form=$('login-form');
  form.elements.email.focus();
  form.addEventListener('submit',async event=>{
   event.preventDefault();
   const submit=$('auth-submit');
   const errorNode=$('auth-error');
+  const infoNode=$('auth-info');
   submit.disabled=true;
-  submit.textContent='Sedang log masuk…';
+  submit.textContent=signup?'Sedang mendaftar…':'Sedang log masuk…';
   errorNode.textContent='';
+  infoNode.textContent='';
   try {
-   await cloud.signIn(form.elements.email.value,form.elements.password.value);
+   if (signup) {
+    const result=await cloud.signUp(form.elements.email.value,form.elements.password.value);
+    if (result.confirmationRequired) {
+     authMode='signin';
+     renderAuthGate('','Akaun dicipta! Sila sahkan pautan dalam emel anda (atau sahkan pengguna di papan pemuka Supabase), kemudian log masuk.');
+     return;
+    }
+   } else {
+    await cloud.signIn(form.elements.email.value,form.elements.password.value);
+   }
    syncStatus='Menyelaraskan data awan…';
    syncError='';
    render();
@@ -172,7 +224,7 @@ function renderAuthGate(errorMessage='') {
    if (!form.isConnected) return;
    errorNode.textContent=error.message;
    submit.disabled=false;
-   submit.textContent='Log masuk';
+   submit.textContent=signup?'Daftar akaun':'Log masuk';
   }
  });
 }
@@ -275,6 +327,7 @@ function render() {
   renderAuthGate();
   return;
  }
+ renderInstallBanner();
  $('auth-gate').hidden=true;
  $('auth-gate').innerHTML='';
  $('app-layout').hidden=false;
@@ -567,7 +620,8 @@ function settings() {
  if (settingsTab==='Projects') return switches+projectPanel();
  if (settingsTab==='General') {
   const email=cloud.getSession()?.user?.email||'';
-  const cloudPanel=section('Penyelarasan awan & akaun','<div class="detail"><p><strong>'+html(email)+'</strong></p><p class="small muted">'+html(syncStatus)+'</p>'+(syncError?'<p class="small sync-error" role="alert">'+html(syncError)+'</p>':'')+'<div class="backup-actions">'+button(syncBusy?'Menyelaraskan…':'Selaraskan sekarang','data-sync-now'+(syncBusy?' disabled':''))+button('Log keluar','data-sign-out')+'</div></div>');
+  const installBtn=isStandaloneApp()?'':button('Pasang aplikasi','data-install-app');
+  const cloudPanel=section('Penyelarasan awan & akaun','<div class="detail"><p><strong>'+html(email)+'</strong></p><p class="small muted">'+html(syncStatus)+'</p>'+(syncError?'<p class="small sync-error" role="alert">'+html(syncError)+'</p>':'')+'<div class="backup-actions">'+button(syncBusy?'Menyelaraskan…':'Selaraskan sekarang','data-sync-now'+(syncBusy?' disabled':''))+installBtn+button('Log keluar','data-sign-out')+'</div></div>');
   return switches+cloudPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
  }
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
@@ -737,10 +791,16 @@ document.addEventListener('click',e=>{
  const control=e.target.closest('button');
  if (!control) return;
  const data=control.dataset;
+ if ('installApp' in data) { void triggerInstall(); return; }
+ if ('dismissInstall' in data) { installDismissed=true; renderInstallBanner(); return; }
+ if ('authMode' in data) { authMode=data.authMode; renderAuthGate(); return; }
  if ('syncNow' in data) { void syncWithCloud({notifyOnDone:true}); return; }
  if ('signOut' in data) {
   void (async()=>{
    await cloud.signOut();
+   ({records,domains,projects,notes,tags,subfolders}=emptyState());
+   drafts.clearAll();
+   try { localStorage.removeItem(key); } catch {}
    lockWorkspace();
    notify('Anda telah log keluar');
   })();
@@ -902,5 +962,18 @@ document.addEventListener('visibilitychange',()=>{
  if (document.hidden) drafts.capture();
  else if (cloud.getSession()) void syncWithCloud();
 });
+window.addEventListener('beforeinstallprompt',event=>{
+ event.preventDefault();
+ deferredInstallPrompt=event;
+ renderInstallBanner();
+});
+window.addEventListener('appinstalled',()=>{
+ deferredInstallPrompt=null;
+ installDismissed=true;
+ renderInstallBanner();
+});
+if ('serviceWorker' in navigator) {
+ window.addEventListener('load',()=>{ navigator.serviceWorker.register('./sw.js').catch(()=>{}); });
+}
 render();
 if (cloud.getSession()) void syncWithCloud();

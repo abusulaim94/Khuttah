@@ -18,6 +18,15 @@ function parseError(payload, status) {
   if (code === 'email_not_confirmed' || /email not confirmed/i.test(message)) {
     return 'Emel belum disahkan. Sila semak peti masuk emel anda atau sahkan pengguna di papan pemuka Supabase.';
   }
+  if (code === 'user_already_exists' || /already registered/i.test(message)) {
+    return 'Emel ini sudah didaftarkan. Sila pilih Log masuk.';
+  }
+  if (code === 'signup_disabled' || /signups not allowed/i.test(message)) {
+    return 'Pendaftaran akaun baharu telah ditutup.';
+  }
+  if (code === 'weak_password' || /password should be at least/i.test(message)) {
+    return 'Kata laluan mestilah sekurang-kurangnya 6 aksara.';
+  }
   if (code === 'PGRST205' || code === '42P01' || /khuttah_workspaces/i.test(message)) {
     return 'Jadual khuttah_workspaces belum dicipta. Jalankan fail supabase/schema.sql di SQL Editor Supabase.';
   }
@@ -148,6 +157,22 @@ export function createCloudController({
     return session;
   }
 
+  async function signUp(email, password) {
+    const cleanEmail = String(email ?? '').trim();
+    const cleanPassword = String(password ?? '');
+    if (!cleanEmail || !cleanPassword) throw new Error('Masukkan emel dan kata laluan.');
+    if (cleanPassword.length < 6) throw new Error('Kata laluan mestilah sekurang-kurangnya 6 aksara.');
+    const data = await request('/auth/v1/signup', {
+      method: 'POST',
+      body: {email: cleanEmail, password: cleanPassword},
+    });
+    if (data?.access_token && data?.user?.id) {
+      writeSession(formatSession(data));
+      return {session, confirmationRequired: false};
+    }
+    return {session: null, confirmationRequired: true};
+  }
+
   async function signOut() {
     const token = session?.access_token;
     writeSession(null);
@@ -202,6 +227,7 @@ export function createCloudController({
     markPendingSync: () => writeMeta({pendingSync: true}),
     ensureValidSession,
     signIn,
+    signUp,
     signOut,
     pullState,
     pushState,
