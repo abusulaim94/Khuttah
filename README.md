@@ -74,6 +74,8 @@ LAPORAN_SEMAKAN_HTML.md        Laporan sejarah bagi versi sebelum web app
 
 Repositori sasaran: [abusulaim94/Khuttah](https://github.com/abusulaim94/Khuttah).
 
+Auto-push selepas commit pada `main`, tetapan identiti `abusulaim94` dan cara mengurus akaun lama diterangkan dalam [panduan GitHub](docs/GITHUB.md). Aktifkan pada komputer ini dengan `npm.cmd run github:setup`, kemudian log masuk akaun yang betul melalui Git Credential Manager.
+
 Git menyimpan sejarah kod setempat. Push menghantar kod dan sejarah tersebut ke GitHub; fail sandaran peribadi dan `node_modules/` dikecualikan melalui `.gitignore`. Selepas akses disahkan, baca sejarah remote sebelum menyatukan serta menghantar perubahan. [Panduan rasmi GitHub](https://docs.github.com/en/migrations/importing-source-code/using-the-command-line-to-import-source-code/adding-locally-hosted-code-to-github).
 
 Urutan pembangunan selepas asas ini:
