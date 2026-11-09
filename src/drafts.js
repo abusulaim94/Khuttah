@@ -16,6 +16,8 @@ function restoreFields(form, fields) {
   apply();
   for (const name of ['type', 'domain']) form.elements.namedItem(name)?.dispatchEvent(new Event('change', {bubbles: true}));
   apply();
+  form.elements.namedItem('undated')?.dispatchEvent(new Event('change', {bubbles: true}));
+  form.dispatchEvent(new Event('draftrestore'));
 }
 
 export function createDraftController() {
@@ -36,13 +38,13 @@ export function createDraftController() {
     if (JSON.stringify(fields) === active.baseline) {
       delete entries[active.key];
       write();
-      active.message.textContent = 'Draf disimpan apabila anda menaip.';
+      active.message.textContent = 'Draf automatik';
       active.discard.hidden = true;
       return;
     }
     entries[active.key] = {fields, savedAt: new Date().toISOString()};
     const saved = write();
-    active.message.textContent = saved ? 'Draf disimpan dalam pelayar ini.' : 'Draf tersedia dalam sesi ini sahaja.';
+    active.message.textContent = saved ? 'Draf disimpan' : 'Draf dalam sesi ini';
     active.discard.hidden = false;
   }
   function clear() {
@@ -72,7 +74,7 @@ export function createDraftController() {
       restoreFields(form, saved.fields);
       message.textContent = 'Draf sebelum ini dipulihkan.';
       discard.hidden = false;
-    } else message.textContent = 'Draf disimpan apabila anda menaip.';
+    } else message.textContent = 'Draf automatik';
     active.restoring = false;
     discard.addEventListener('click', () => {
       if (active?.form !== form) return;
@@ -85,5 +87,13 @@ export function createDraftController() {
     form.addEventListener('input', () => { if (active?.form === form) capture(); });
     form.addEventListener('change', () => { if (active?.form === form) capture(); });
   }
-  return {attach, capture, clear, detach, clearAll, keys: () => Object.keys(entries)};
+  function changeTag(scope, previous, next) {
+    for (const [key, entry] of Object.entries(entries)) {
+      const matching = scope === 'Notes' ? /^note:(Notes|Master|PhD):/.test(key) : key.startsWith('note:' + scope + ':') || scope === 'Events' && key.startsWith('record:');
+      if (!matching || !Array.isArray(entry.fields)) continue;
+      entry.fields = entry.fields.flatMap(field => field.name === 'tags' && field.value.toLowerCase() === previous.toLowerCase() ? next === null ? [] : [{...field, value: next}] : [field]);
+    }
+    write();
+  }
+  return {attach, capture, clear, detach, clearAll, changeTag, keys: () => Object.keys(entries)};
 }

@@ -6,7 +6,7 @@ export const SUPABASE_PUBLISHABLE_KEY = 'sb_publishable_wcqOXIYjJ0SMGA90CzCmLg_Z
 export const SESSION_STORAGE_KEY = 'khuttah-auth-session-v1';
 export const SYNC_META_KEY = 'khuttah-cloud-meta-v1';
 
-const defaultTags = {Notes: [], Knowledge: [], Events: []};
+const defaultTags = {Notes: [], Knowledge: [], Events: [], Works: []};
 
 function parseError(payload, status) {
   if (!payload || typeof payload !== 'object') return `Ralat pelayan (${status}).`;
@@ -41,6 +41,7 @@ export function createCloudController({
 } = {}) {
   let session = readSession();
   let meta = readMeta();
+  let pendingVersion = 0;
 
   function readSession() {
     try {
@@ -186,6 +187,7 @@ export function createCloudController({
     const active = await ensureValidSession();
     if (!active) throw new Error('Sesi tamat. Sila log masuk semula.');
     const userId = encodeURIComponent(active.user.id);
+    const pullingVersion = pendingVersion;
     const rows = await request(
       `/rest/v1/khuttah_workspaces?select=state,updated_at&user_id=eq.${userId}`,
       {token: active.access_token, headers: {Accept: 'application/json'}},
@@ -198,13 +200,14 @@ export function createCloudController({
       normaliseState({...rawState, tags: {...defaultTags, ...(rawState?.tags || {})}}),
       {draftKeys},
     );
-    writeMeta({pendingSync: false, lastSyncedAt: rows[0].updated_at || new Date().toISOString()});
+    writeMeta({pendingSync: meta.pendingSync || pendingVersion !== pullingVersion, lastSyncedAt: rows[0].updated_at || new Date().toISOString()});
     return {status: 'loaded', state: validated, updatedAt: rows[0].updated_at || null};
   }
 
   async function pushState(state) {
     const active = await ensureValidSession();
     if (!active) throw new Error('Sesi tamat. Sila log masuk semula.');
+    const sentVersion = pendingVersion;
     const validated = normaliseState(state);
     const updatedAt = new Date().toISOString();
     await request('/rest/v1/khuttah_workspaces?on_conflict=user_id', {
@@ -217,14 +220,14 @@ export function createCloudController({
         updated_at: updatedAt,
       },
     });
-    writeMeta({pendingSync: false, lastSyncedAt: updatedAt});
+    writeMeta({pendingSync: pendingVersion !== sentVersion, lastSyncedAt: updatedAt});
     return {updatedAt};
   }
 
   return {
     getSession: () => session,
     getMeta: () => meta,
-    markPendingSync: () => writeMeta({pendingSync: true}),
+    markPendingSync: () => { pendingVersion++; return writeMeta({pendingSync: true}); },
     ensureValidSession,
     signIn,
     signUp,
