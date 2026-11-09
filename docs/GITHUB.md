@@ -62,7 +62,7 @@ Urutan kerja:
 6. Push `main` menggunakan `--force-with-lease=refs/heads/main:SHA_LAMA` supaya perubahan orang lain yang masuk kemudian tidak ditindih. Semak sekatan branch dan keadaan GitHub Actions/Pages dahulu.
 7. Selaraskan clone kerja dengan sejarah baharu selepas mengekalkan perubahan setempat. SHA commit lama telah berubah; clone lama tidak boleh terus dicampurkan melalui pull biasa.
 
-Langkah penulisan semula sejarah belum dijalankan. Paparan contributor GitHub boleh mengambil kira-kira 24 jam untuk dikemas kini selepas sejarah diubah. Jika masih salah selepas itu, hubungi GitHub Support.
+Penulisan semula sejarah telah diselesaikan pada 10 November 2026: enam commit lama dibetulkan dan semua tujuh commit ketika itu dikaitkan dengan `abusulaim94`. Kandungan fail, mesej dan tarikh commit dikekalkan. Sandaran bundle setempat berada dalam `backups/github-history-20261110012927-MYT/`. Paparan contributor GitHub boleh mengambil kira-kira 24 jam untuk dikemas kini selepas sejarah diubah. Jika masih salah selepas itu, hubungi GitHub Support.
 
 Jika `abusulaimmadani` juga mempunyai akses sebagai collaborator, pemilik repositori boleh membuangnya melalui **Settings → Collaborators → Remove access**. Akses collaborator dan senarai Contributors ialah dua perkara berasingan.
 

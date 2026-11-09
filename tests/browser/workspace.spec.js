@@ -224,3 +224,21 @@ test('paparan desktop, tablet landscape/portrait dan telefon tanpa limpahan', as
     await page.locator('#modal [data-close]').first().click();
   }
 });
+
+test('tablet sentuh landscape menggunakan bar sisi dan editor nota', async ({browser}) => {
+  const context = await browser.newContext({viewport: {width: 1180, height: 820}, isMobile: true, hasTouch: true});
+  const page = await context.newPage();
+  const failures = [];
+  page.on('pageerror', error => failures.push(error.message));
+  try {
+    await setup(page);
+    expect(await page.evaluate(() => matchMedia('(pointer:coarse)').matches)).toBe(true);
+    await expect(page.locator('#sidebar')).toBeVisible();
+    await expect(page.locator('#bottom-nav')).toBeHidden();
+    await page.locator('#sidebar [data-page="Notes"]').tap();
+    await page.locator('[data-note="0"]').tap();
+    await expect(page.getByRole('textbox', {name: 'Catatan', exact: true})).toBeVisible();
+    expect(await page.locator('#modal').evaluate(node => node.scrollWidth - node.clientWidth)).toBeLessThanOrEqual(1);
+    expect(failures).toEqual([]);
+  } finally { await context.close(); }
+});
