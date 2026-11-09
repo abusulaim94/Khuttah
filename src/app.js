@@ -1,10 +1,15 @@
 import {normaliseState, createBackup, parseBackup, MAX_BACKUP_BYTES} from './storage.js';
 import {createDraftController} from './drafts.js';
 import {clearLegacyDemoData} from './cleanup.js';
+import {createCloudController} from './supabase.js';
 
 const drafts=createDraftController();
+const cloud=createCloudController();
 let undoAction=null;
 let recoverySource=null;
+let syncStatus='Menyemak penyelarasan awan…';
+let syncError='';
+let syncBusy=false;
 const paths = {
  note:'<path d="M5 3h14v13l-5 5H5zM14 21v-5h5M8 8h8M8 12h8"/>',
  logo:'<path d="M5 4v16M19 4 5 14m6-4 8 10"/>', home:'<rect x="3" y="3" width="7" height="7" rx="1"/><rect x="14" y="3" width="7" height="7" rx="1"/><rect x="3" y="14" width="7" height="7" rx="1"/><rect x="14" y="14" width="7" height="7" rx="1"/>',
@@ -132,14 +137,108 @@ function save(message,action=null) {
   storageOK=true;
  }
  catch { storageOK=false; }
+ cloud.markPendingSync();
  render();
  notify(message+(storageOK?'':' · Perubahan tersedia dalam sesi ini sahaja.'),action);
+ if (!recoverySource&&cloud.getSession()) void pushToCloud();
+}
+function renderAuthGate(errorMessage='') {
+ if ($('modal').open) $('modal').close();
+ $('app-layout').hidden=true;
+ $('bottom-nav').hidden=true;
+ $('bottom-nav').innerHTML='';
+ $('sidebar').innerHTML='';
+ $('crumb').textContent='';
+ $('actions').innerHTML='';
+ $('main').innerHTML='';
+ $('auth-gate').hidden=false;
+ $('auth-gate').innerHTML='<section class="auth-card panel"><div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><h1>Log masuk</h1><p class="muted small">Ruang kerja ini dilindungi. Log masuk untuk mengakses dan menyelaraskan data anda antara telefon dan komputer.</p><form id="login-form" class="dialog-body auth-form"><label>Emel<input type="email" name="email" autocomplete="email" required autofocus></label><label>Kata laluan<input type="password" name="password" autocomplete="current-password" required></label><p id="auth-error" class="small" role="alert">'+html(errorMessage)+'</p><button class="btn primary auth-submit" id="auth-submit" type="submit">Log masuk</button></form></section>';
+ const form=$('login-form');
+ form.elements.email.focus();
+ form.addEventListener('submit',async event=>{
+  event.preventDefault();
+  const submit=$('auth-submit');
+  const errorNode=$('auth-error');
+  submit.disabled=true;
+  submit.textContent='Sedang log masuk…';
+  errorNode.textContent='';
+  try {
+   await cloud.signIn(form.elements.email.value,form.elements.password.value);
+   syncStatus='Menyelaraskan data awan…';
+   syncError='';
+   render();
+   await syncWithCloud({notifyOnDone:true});
+  } catch (error) {
+   if (!form.isConnected) return;
+   errorNode.textContent=error.message;
+   submit.disabled=false;
+   submit.textContent='Log masuk';
+  }
+ });
+}
+function lockWorkspace(message='') {
+ drafts.capture();
+ renderAuthGate(message);
+}
+async function pushToCloud({notifyOnDone=false}={}) {
+ if (!cloud.getSession()||recoverySource||syncBusy) return;
+ syncBusy=true;
+ syncError='';
+ syncStatus='Menyimpan ke awan…';
+ if (page==='Settings'&&settingsTab==='General') render();
+ try {
+  await cloud.pushState(currentState());
+  syncStatus='Diselaraskan ke awan';
+  if (notifyOnDone) notify('Data diselaraskan ke awan');
+ } catch (error) {
+  if (!cloud.getSession()) { syncBusy=false; lockWorkspace('Sesi tamat. Sila log masuk semula.'); return; }
+  syncError=error.message;
+  syncStatus='Disimpan setempat (menunggu sambungan awan)';
+ } finally {
+  syncBusy=false;
+  if (cloud.getSession()&&page==='Settings'&&settingsTab==='General') render();
+ }
+}
+async function syncWithCloud({notifyOnDone=false}={}) {
+ if (!cloud.getSession()||recoverySource||syncBusy) return;
+ syncBusy=true;
+ syncError='';
+ syncStatus='Menyelaraskan dengan awan…';
+ if (page==='Settings'&&settingsTab==='General') render();
+ try {
+  if (cloud.getMeta().pendingSync) {
+   await cloud.pushState(currentState());
+   syncStatus='Diselaraskan ke awan';
+   if (notifyOnDone) notify('Perubahan setempat diselaraskan ke awan');
+  } else {
+   const remote=await cloud.pullState({draftKeys:drafts.keys()});
+   if (remote.status==='loaded') {
+    const incoming=migrateGroupNames(remote.state);
+    ({records,domains,projects,notes,tags,subfolders,demoCleanupVersion}=incoming);
+    try { localStorage.setItem(key,JSON.stringify(currentState())); storageOK=true; } catch { storageOK=false; }
+    syncStatus='Diselaraskan dengan awan';
+    render();
+    if (notifyOnDone) notify('Data terkini diselaraskan dari awan');
+   } else if (remote.status==='empty') {
+    await cloud.pushState(currentState());
+    syncStatus='Diselaraskan ke awan';
+    if (notifyOnDone) notify('Ruang kerja dimuat naik ke awan');
+   }
+  }
+ } catch (error) {
+  if (!cloud.getSession()) { syncBusy=false; lockWorkspace('Sesi tamat. Sila log masuk semula.'); return; }
+  syncError=error.message;
+  syncStatus='Gagal menyelaraskan dengan awan';
+ } finally {
+  syncBusy=false;
+  if (cloud.getSession()&&page==='Settings'&&settingsTab==='General') render();
+ }
 }
 function showPage(nextPage) {
  page=nextPage;
  render();
  window.scrollTo(0,0);
- $('main').querySelector('h1').focus({preventScroll:true});
+ $('main').querySelector('h1')?.focus({preventScroll:true});
 }
 function pageLinks(names,inDialog=false) {
  return names.map(name=>{
@@ -149,7 +248,8 @@ function pageLinks(names,inDialog=false) {
  }).join('');
 }
 function profileBlock(inDialog=false) {
- return '<div class="person"><span class="avatar" aria-hidden="true">AS</span><div class="profile-info"><strong class="small">Abu Sulaim</strong><div class="muted small">Akaun peribadi</div></div>'+button('','data-page="Settings" data-profile-settings aria-label="Tetapan" title="Tetapan"'+(inDialog?' data-from-more':'')+(page==='Settings'?' aria-current="page"':''),'settings','icon ghost profile-settings'+(page==='Settings'?' active':''))+'</div>';
+ const email=cloud.getSession()?.user?.email||'Akaun peribadi';
+ return '<div class="person"><span class="avatar" aria-hidden="true">AS</span><div class="profile-info"><strong class="small">Abu Sulaim</strong><div class="muted small profile-email">'+html(email)+'</div></div>'+button('','data-page="Settings" data-profile-settings aria-label="Tetapan" title="Tetapan"'+(inDialog?' data-from-more':'')+(page==='Settings'?' aria-current="page"':''),'settings','icon ghost profile-settings'+(page==='Settings'?' active':''))+'</div>';
 }
 function bottomNavigation() {
  const links=primaryPages.map(name=>{
@@ -171,6 +271,14 @@ function domainLinks(inDialog=false) {
  }).join('');
 }
 function render() {
+ if (!cloud.getSession()) {
+  renderAuthGate();
+  return;
+ }
+ $('auth-gate').hidden=true;
+ $('auth-gate').innerHTML='';
+ $('app-layout').hidden=false;
+ $('bottom-nav').hidden=false;
  $('bottom-nav').innerHTML=bottomNavigation();
  $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
  const [moduleTitle,,subtitle]=modules[page];
@@ -457,7 +565,11 @@ function settings() {
  const tabs={Domains:'Kumpulan',Projects:'Projek',General:'Umum'};
  const switches='<div class="segments settings-tabs" aria-label="Bahagian tetapan">'+Object.entries(tabs).map(([id,label])=>'<button data-settings="'+id+'" class="'+(settingsTab===id?'active':'')+'" aria-pressed="'+(settingsTab===id)+'">'+label+'</button>').join('')+'</div>';
  if (settingsTab==='Projects') return switches+projectPanel();
- if (settingsTab==='General') return switches+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam pelayar ini. Eksport sandaran untuk berpindah pelayar, peranti atau alamat web.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
+ if (settingsTab==='General') {
+  const email=cloud.getSession()?.user?.email||'';
+  const cloudPanel=section('Penyelarasan awan & akaun','<div class="detail"><p><strong>'+html(email)+'</strong></p><p class="small muted">'+html(syncStatus)+'</p>'+(syncError?'<p class="small sync-error" role="alert">'+html(syncError)+'</p>':'')+'<div class="backup-actions">'+button(syncBusy?'Menyelaraskan…':'Selaraskan sekarang','data-sync-now'+(syncBusy?' disabled':''))+button('Log keluar','data-sign-out')+'</div></div>');
+  return switches+cloudPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
+ }
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
  return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
 }
@@ -625,6 +737,15 @@ document.addEventListener('click',e=>{
  const control=e.target.closest('button');
  if (!control) return;
  const data=control.dataset;
+ if ('syncNow' in data) { void syncWithCloud({notifyOnDone:true}); return; }
+ if ('signOut' in data) {
+  void (async()=>{
+   await cloud.signOut();
+   lockWorkspace();
+   notify('Anda telah log keluar');
+  })();
+  return;
+ }
  if ('undo' in data) {
   const restore=undoAction;
   undoAction=null;
@@ -768,9 +889,18 @@ document.addEventListener('drop',event=>{
  moveThesisNote(index,Number(target.dataset.dropChapter));
 });
 document.addEventListener('keydown',e=>{
- if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){ e.preventDefault(); searchDialog(); }
+ if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){
+  if (!cloud.getSession()) return;
+  e.preventDefault();
+  searchDialog();
+ }
 });
 $('modal').addEventListener('close',()=>{ if (!$('modal').open) drafts.detach(); });
 window.addEventListener('pagehide',()=>drafts.capture());
-document.addEventListener('visibilitychange',()=>{ if (document.hidden) drafts.capture(); });
+window.addEventListener('online',()=>{ if (cloud.getSession()) void syncWithCloud(); });
+document.addEventListener('visibilitychange',()=>{
+ if (document.hidden) drafts.capture();
+ else if (cloud.getSession()) void syncWithCloud();
+});
 render();
+if (cloud.getSession()) void syncWithCloud();

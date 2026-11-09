@@ -74,8 +74,8 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .backup-actions{margin:12px 0}
 .dialog-body .import-confirm{display:flex;align-items:flex-start;gap:8px;font-weight:400}
 .dialog-body .import-confirm input{width:auto;margin:3px 0 0;flex:none}
-#import-error{color:#b91c1c}
-#import-error:empty{display:none}
+#import-error,#auth-error,.sync-error{color:#b91c1c}
+#import-error:empty,#auth-error:empty{display:none}
 .storage-notice{border:1px solid var(--border);border-radius:8px;background:var(--soft);padding:14px;margin-bottom:18px}
 .storage-notice p{margin-bottom:10px}
 .storage-notice .btn{margin:0 6px 6px 0}
@@ -85,3 +85,10 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .row-main>strong{overflow-wrap:anywhere}
 .page-head .scope-select{max-width:180px}
 @media(max-width:380px){.page-head .scope-select{max-width:100%}}
+.auth-gate{min-height:100dvh;display:grid;place-items:center;padding:20px}
+.auth-card{width:min(400px,100%);padding:24px;display:grid;gap:10px}
+.auth-card .brand{padding:0;margin:0 0 6px}
+.auth-form{padding:6px 0 0}
+.auth-submit{width:100%;min-height:38px;margin-top:2px}
+.profile-email{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.settings-gap{height:14px}

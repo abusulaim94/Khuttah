@@ -2,7 +2,7 @@
 
 Tugasan, acara, deadline, bacaan, nota dan penyelidikan dalam satu ruang kerja. Reka bentuk serta susunan menu dikekalkan daripada prototaip HTML.
 
-Versi ini menggunakan JavaScript dan CSS dengan Vite untuk pembangunan serta build. Data dan draf disimpan dalam pelayar. Log masuk, pangkalan data awan dan penyelarasan antara peranti belum dilaksanakan.
+Versi ini menggunakan JavaScript dan CSS dengan Vite untuk pembangunan serta build. Ruang kerja dilindungi oleh log masuk Supabase Auth dan diselaraskan secara automatik antara telefon serta komputer melalui pangkalan data awan (`public.khuttah_workspaces`), di samping simpanan setempat dan draf dalam pelayar.
 
 Pemasangan baharu bermula tanpa tugasan, acara, peringatan, projek, nota atau tag contoh. Kumpulan Peribadi, Uthmani dan KPAZ dikekalkan sebagai struktur awal. Data demo lama yang masih asal dibersihkan sekali; rekod yang telah diubah, data ciptaan pengguna dan rekod yang mempunyai draf dikekalkan. Salinan data tersimpan sebelum pembersihan dikekalkan dalam pelayar apabila ruang storan membenarkan.
 
@@ -48,6 +48,7 @@ Fail prototaip dikekalkan untuk rujukan dan eksport data lama. Perubahan baharu 
 - Eksport/import JSON dengan pratonton, pengesahan struktur data dan pengesahan pengguna.
 - Pemulihan data tersimpan yang tidak sah tanpa menindih salinan asal secara automatik.
 - Bacaan & Kajian, Nota, Master dan PhD di bawah Ilmu dan Pengetahuan.
+- Skrin log masuk terlindung dan penyelarasan awan automatik antara peranti melalui Supabase Auth + Postgres RLS.
 
 **Struktur projek**
 
@@ -58,10 +59,13 @@ src/styles.css                 Reka bentuk dan paparan responsif
 src/storage.js                 Format, pengesahan dan sandaran data
 src/drafts.js                  Penyimpanan serta pemulihan draf borang
 src/cleanup.js                 Pembersihan sekali bagi data demo lama
+src/supabase.js                Pengesahan log masuk dan penyelarasan awan Supabase
+supabase/schema.sql            Skema jadual dan polisi RLS Postgres untuk Supabase
 tests/storage.test.js          Ujian sandaran, data lama dan data tidak sah
 tests/cleanup.test.js          Ujian pembersihan demo dan perlindungan data pengguna
+tests/supabase.test.js         Ujian log masuk, pembaharuan sesi dan penyelarasan awan
 public/favicon.svg            Ikon aplikasi
-.github/workflows/check.yml   Ujian dan build melalui GitHub Actions
+.github/workflows/check.yml   Ujian, build dan penerbitan GitHub Pages
 KHUTTAH_Prototype.html         Prototaip lama dan alat eksport data
 LAPORAN_SEMAKAN_HTML.md        Laporan sejarah bagi versi sebelum web app
 ```

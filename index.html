@@ -10,14 +10,15 @@
 <link rel="stylesheet" href="./src/styles.css">
 </head>
 <body>
-<div class="layout">
+<main class="auth-gate" id="auth-gate"></main>
+<div class="layout" id="app-layout" hidden>
 <aside class="sidebar" id="sidebar" aria-label="Bar sisi"></aside>
 <div>
 <header class="top"><div class="crumb"><span class="muted">Ruang kerja</span><span class="muted">/</span><strong id="crumb"></strong></div><div class="actions" id="actions"></div></header>
 <main class="content" id="main"></main>
 </div>
 </div>
-<nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi bawah"></nav>
+<nav class="bottom-nav" id="bottom-nav" aria-label="Navigasi bawah" hidden></nav>
 <dialog id="modal" aria-labelledby="modal-title"></dialog><div class="toast" id="toast" role="status"></div>
 <script type="module" src="./src/app.js"></script>
 </body>
