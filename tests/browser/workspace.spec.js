@@ -243,10 +243,10 @@ test('tablet sentuh landscape menggunakan bar sisi dan editor nota', async ({bro
   } finally { await context.close(); }
 });
 
-test('Idea rambang mempunyai menu sendiri dan tidak menjadi kategori Karya', async ({page}) => {
+test('Khawatir mempunyai menu sendiri dan tidak menjadi kategori Karya', async ({page}) => {
   await setup(page);
   await go(page, 'Ideas');
-  await page.getByRole('button', {name: 'Idea baharu', exact: true}).click();
+  await page.getByRole('button', {name: 'Khawatir baharu', exact: true}).click();
   await page.getByRole('textbox', {name: 'Catatan', exact: true}).fill('Idea aktiviti hujung minggu');
   await expect(page.locator('[name="bookId"]')).toHaveCount(0);
   await page.locator('#personal-note-form button[type="submit"]').click();
@@ -254,7 +254,7 @@ test('Idea rambang mempunyai menu sendiri dan tidak menjadi kategori Karya', asy
   await expect(page.locator('.sticky-card')).toContainText('Idea aktiviti hujung minggu');
   await go(page, 'Works');
   await expect(page.locator('#main')).not.toContainText('Idea aktiviti hujung minggu');
-  await expect(page.locator('#main')).not.toContainText('Idea rambang');
+  await expect(page.locator('#main')).not.toContainText('Khawatir');
   await go(page, 'Ideas');
   await expect(page.locator('.sticky-card')).toContainText('Idea aktiviti hujung minggu');
 });

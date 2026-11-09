@@ -47,7 +47,7 @@ Fail prototaip dikekalkan untuk rujukan dan eksport data lama. Perubahan baharu 
 - Tugasan boleh disimpan tanpa tarikh, ditapis secara berasingan, kemudian diberikan tarikh atau ditunda.
 - Nota dalam menu utama, dengan tajuk, bold, italic, underline, senarai, checklist, petikan dan undo/redo. Format disimpan bersama teks biasa dan boleh dipulihkan daripada draf atau sandaran.
 - Tag boleh ditambah semasa menulis, dinamakan semula dan dipadam. Suntingan tag turut mengemas kini catatan dan draf berkaitan.
-- Idea rambang mempunyai menu tersendiri untuk catatan bebas, berasingan daripada Karya.
+- Khawatir mempunyai menu tersendiri untuk catatan bebas, berasingan daripada Karya.
 - Karya Abu Sulaim mempunyai folder Sudah diterbitkan dan Belum diterbitkan. Empat buku diterbitkan disediakan: Nota Mudah Makhraj & Sifat Huruf, Kesimpulan Makhraj & Sifat Huruf, Tajwid al-Nasyr dan Akhlaq Hamalat al-Quran.
 - Setiap buku mempunyai papan sticky notes untuk pembetulan, idea cetakan seterusnya, idea buku dan catatan. Nota pantas boleh disimpan tanpa tajuk atau buku dalam Belum ditetapkan, kemudian diseret atau dipindahkan melalui pilihan Pindah. Pemegang seret menyokong sentuhan tablet.
 - Buku boleh dikelaskan dalam lebih daripada satu bidang. Bidang awal ialah Tajwid, Akhlak, Terjemahan dan Sirah; nama bidang boleh ditambah, disunting dan dipadam. Status penerbitan boleh diubah tanpa memisahkan nota daripada buku.
