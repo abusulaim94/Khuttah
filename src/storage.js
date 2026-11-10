@@ -76,7 +76,7 @@ export function normaliseState(value) {
       noteHtml: optionalText(entry.noteHtml, 'format nota'),
       createdAt: timestamp(entry.createdAt), updatedAt: timestamp(entry.updatedAt),
       ...(entry.kind === 'Karya' || entry.kind === 'Idea rambang' ? {
-        color: Object.hasOwn(workColors, entry.color) ? entry.color : 'yellow',
+        color: Object.hasOwn(workColors, entry.color) ? entry.color : 'white',
         pinned: Boolean(entry.pinned), archived: Boolean(entry.archived),
       } : {}),
       ...(entry.kind === 'Karya' ? {

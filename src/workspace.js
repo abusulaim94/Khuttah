@@ -1,5 +1,5 @@
 export const workCategories = ['Pembetulan', 'Idea cetakan seterusnya', 'Idea buku', 'Catatan'];
-export const workColors = {yellow: 'Kuning', rose: 'Merah jambu', blue: 'Biru', green: 'Hijau', purple: 'Ungu', white: 'Putih'};
+export const workColors = {white: 'Putih', yellow: 'Kuning pastel', rose: 'Merah jambu pastel', blue: 'Biru pastel', green: 'Hijau pastel', purple: 'Ungu pastel'};
 export const tagScopes = ['Notes', 'Knowledge', 'Events', 'Works', 'Ideas'];
 export const tagScopeOf = item => item.type ? item.type === 'event' ? 'Events' : null : item.kind === 'Karya' ? 'Works' : item.kind === 'Idea rambang' ? 'Ideas' : ['Rujukan', 'Penyelidikan'].includes(item.kind) ? 'Knowledge' : 'Notes';
 export function initialLibrary() {
