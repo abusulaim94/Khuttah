@@ -53,6 +53,7 @@ test('ringkasan semua kumpulan, tiga jenis deadline dan tetapan tanpa Projek', a
   const deadlines = page.locator('.deadline-preview');
   for (const title of ['Zeta tugasan', 'Acara kumpulan lain', 'Peringatan bayaran']) await expect(deadlines.getByRole('button', {name: title, exact: true})).toBeVisible();
   await expect(deadlines.getByText('Acara sudah berlalu')).toHaveCount(0);
+  await expect(page.locator('#main')).not.toContainText('Alif tanpa tarikh');
   await page.locator('#sidebar [data-scope="1"]').click();
   await expect(page.locator('#main h1')).toHaveText('Peribadi');
   await go(page, 'Overview');
@@ -67,6 +68,80 @@ test('ringkasan semua kumpulan, tiga jenis deadline dan tetapan tanpa Projek', a
   await go(page, 'Settings');
   await expect(page.locator('[data-settings="Projects"]')).toHaveCount(0);
   await expect(page.locator('.page-head > div > .muted')).toHaveCount(0);
+});
+
+test('urusan selesai keluar daripada seluruh ringkasan dan boleh dirujuk dalam tetapan serta menu asal', async ({page}) => {
+  const data=seed();
+  for(const type of ['task','event','reminder'])data.records.push({id:'done-'+type,type,title:'Selesai '+type,date:today,done:true,updatedAt:new Date().toISOString()});
+  await setup(page,data);
+  for(const period of ['today','week','next','month']){
+    await page.locator('[data-period="'+period+'"]').click();
+    await expect(page.locator('#main')).not.toContainText('Selesai task');
+    await expect(page.locator('#main')).not.toContainText('Selesai event');
+    await expect(page.locator('#main')).not.toContainText('Selesai reminder');
+    await expect(page.locator('#main')).not.toContainText('Alif tanpa tarikh');
+  }
+  await page.locator('[data-period="today"]').click();
+  await expect(page.locator('.metrics .metric strong')).toHaveText(['1','1','0']);
+  await page.locator('.overview-lists [data-check="task-1"]').click();
+  await expect(page.locator('#main')).not.toContainText('Zeta tugasan');
+  await expect(page.locator('.metrics .metric strong').first()).toHaveText('0');
+  await go(page,'Settings');
+  await page.locator('[data-settings="Completed"]').click();
+  for(const title of ['Selesai task','Selesai event','Selesai reminder','Zeta tugasan'])await expect(page.locator('.completed-records')).toContainText(title);
+  await go(page,'Tasks');
+  await page.locator('[data-task-filter="Completed"]').click();
+  await expect(page.locator('#main')).toContainText('Selesai task');
+  await go(page,'Events');
+  await expect(page.locator('#main')).toContainText('Selesai event');
+  await go(page,'Reminders');
+  await expect(page.locator('#main')).toContainText('Selesai reminder');
+  await go(page,'Settings');
+  await page.locator('.completed-records [data-check="task-1"]').click();
+  await expect(page.locator('.completed-records')).not.toContainText('Zeta tugasan');
+  await go(page,'Overview');
+  await expect(page.locator('#main')).toContainText('Zeta tugasan');
+  expect((await saved(page)).records.filter(item=>item.done)).toHaveLength(3);
+});
+
+test('Jumaat dan cuti umum berwarna kelabu, termasuk gantian dan pilihan negeri', async ({page}) => {
+  await page.clock.install({time:new Date('2026-11-10T04:00:00Z')});
+  await setup(page);
+  await go(page,'Planner');
+  await expect(page.locator('.cell[data-create-day="2026-11-13"]')).toHaveClass(/calendar-rest/);
+  await expect(page.locator('.cell[data-create-day="2026-11-12"]')).not.toHaveClass(/calendar-rest/);
+  await expect(page.locator('.calendar-legend')).toContainText('Kelantan');
+  const holiday=page.locator('.cell[data-create-day="2026-11-08"]');
+  await expect(holiday).toHaveClass(/public-holiday/);
+  await expect(holiday).toContainText('Hari Deepavali');
+  await expect(holiday).toHaveCSS('background-color','rgb(240, 240, 242)');
+  await expect(page.locator('.cell[data-create-day="2026-11-09"]')).not.toHaveClass(/public-holiday/);
+  await page.locator('[data-step="-1"]').click();
+  await page.locator('[data-step="-1"]').click();
+  for(const day of ['29','30'])await expect(page.locator('.cell[data-create-day="2026-09-'+day+'"]').locator('.holiday-name')).toContainText('Sultan Kelantan');
+  mkdirSync('.local/qa',{recursive:true});
+  await page.screenshot({path:'.local/qa/planner-kelantan.png',fullPage:true});
+  await page.locator('[data-today]').click();
+  await go(page,'Settings');
+  await page.locator('[data-settings="General"]').click();
+  await expect(page.locator('#holiday-region')).toHaveValue('KTN');
+  await page.locator('#holiday-region').selectOption('SGR');
+  await go(page,'Planner');
+  await page.locator('[data-step="1"]').click();
+  await expect(page.locator('.cell[data-create-day="2026-12-11"]')).toContainText('Sultan Selangor');
+  mkdirSync('.local/qa',{recursive:true});
+  await page.screenshot({path:'.local/qa/planner-holidays.png',fullPage:true});
+  await go(page,'Settings');
+  await page.locator('#holiday-region').selectOption('KUL');
+  await go(page,'Planner');
+  await expect(page.locator('.cell[data-create-day="2026-12-11"] .holiday-name')).toHaveCount(0);
+  await page.reload();
+  await go(page,'Planner');
+  await expect(page.locator('.calendar-legend')).toContainText('Kuala Lumpur');
+  await page.locator('[data-view="Week"]').click();
+  await expect(page.locator('.calendar.week .calendar-rest')).not.toHaveCount(0);
+  await page.locator('.cell[data-create-day="2026-11-13"] .day-num').click();
+  await expect(page.locator('#main > .panel')).toHaveClass(/calendar-rest/);
 });
 
 test('tugasan tanpa tarikh, pemulihan draf, sorting dan penetapan tarikh', async ({page}) => {
@@ -100,8 +175,11 @@ test('klik tarikh perancang mengisi tarikh untuk ketiga-tiga jenis rekod', async
   await setup(page);
   await go(page, 'Planner');
   const chosen = await page.locator('.cell:not(.outside)').nth(12).getAttribute('data-create-day');
+  await expect(page.locator('.calendar-add')).toHaveCount(0);
   for (const [type, label] of [['task', 'tugasan'], ['event', 'acara'], ['reminder', 'peringatan']]) {
-    await page.locator('.calendar-add[data-create-day="' + chosen + '"]').click();
+    const cell=page.locator('.cell[data-create-day="' + chosen + '"]');
+    if(type==='task'){await cell.focus();await cell.press('Enter');}
+    else {const box=await cell.boundingBox();await cell.click({position:{x:box.width/2,y:box.height-5}});}
     await page.locator('#modal').getByRole('button', {name: 'Tambah ' + label, exact: true}).click();
     await expect(page.locator('#item-form [name="type"]')).toHaveValue(type);
     await expect(page.locator('#item-form [name="date"]')).toHaveValue(chosen);
@@ -223,6 +301,7 @@ test('paparan desktop, tablet landscape/portrait dan telefon tanpa limpahan', as
     else await expect(page.locator('#bottom-nav')).toBeVisible();
     for (const scope of ['Overview', 'Planner', 'Tasks', 'Events', 'Reminders', 'Notes', 'Knowledge', 'Master', 'PhD', 'Works', 'Ideas', 'Settings']) {
       await go(page, scope);
+      if(scope==='Planner')await expect(page.locator('#actions [data-new] .new-label')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
       expect(overflow, `${scope} at ${width}x${height}`).toBeLessThanOrEqual(1);
     }

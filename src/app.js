@@ -5,6 +5,7 @@ import {createCloudController} from './supabase.js';
 import {cleanTagNames, tagScopeOf, changeTag, sortItems, upcomingDeadlines, workCategories, workColors, moveWorkNote, changeBookSubject, noteDateLabel} from './workspace.js';
 import {createNoteEditor} from './editor.js';
 import {installBookDragging} from './book-drag.js';
+import {publicHolidays, holidayRegions, holidayYears, defaultHolidayRegion} from './holidays.js';
 let noteEditor=null;
 
 const drafts=createDraftController();
@@ -39,6 +40,8 @@ const secondaryPages=['Knowledge','Master','PhD'];
 const defaultTags={Notes:[],Knowledge:[],Events:[],Works:[],Ideas:[]};
 const tagSelection={Notes:'',Events:'',Knowledge:'',Works:'',Ideas:''};
 const pageDomains={};
+let holidayRegion=defaultHolidayRegion;
+try{const value=localStorage.getItem('khuttah-holiday-region-v1');if(Object.hasOwn(holidayRegions,value))holidayRegion=value;}catch{}
 let workPurpose='',workArchived=false,ideasArchived=false,selectedWorkBook='',bookSubjectFilter='',taskDates='all';
 let quickWorkDrafts={};
 try{const value=JSON.parse(localStorage.getItem('khuttah-book-capture-v1')||'{}');if(value&&typeof value==='object'&&!Array.isArray(value))quickWorkDrafts=value;}catch{}
@@ -347,7 +350,7 @@ function render() {
  const [moduleTitle]=modules[page];
  const title=page==='Group'?domain:moduleTitle;
  $('crumb').textContent=title;
- $('actions').innerHTML=button('<span class="search-label">Cari</span> <kbd>Ctrl K</kbd>','data-search aria-label="Cari dalam ruang kerja"','search','ghost')+(page==='Settings'?'':(page==='Notes'||page==='Knowledge'||page==='Works'||page==='Ideas'||isThesis(page))?button('<span class="new-label">'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'</span>','data-add-note="'+page+'" aria-label="'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'"','plus','primary'):button('<span class="new-label">Tambah</span>','data-new="'+((page==='Planner'||page==='Events')?'event':page==='Reminders'?'reminder':'task')+'" aria-label="Tambah rekod"','plus','primary'));
+ $('actions').innerHTML=button('<span class="search-label">Cari</span> <kbd>Ctrl K</kbd>','data-search aria-label="Cari dalam ruang kerja"','search','ghost')+(page==='Settings'?'':(page==='Notes'||page==='Knowledge'||page==='Works'||page==='Ideas'||isThesis(page))?button('<span class="new-label">'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'</span>','data-add-note="'+page+'" aria-label="'+(page==='Knowledge'?'Tambah entri':'Tambah nota')+'"','plus','primary'):button('<span class="new-label">Tambah</span>','data-new="'+((page==='Planner'||page==='Events')?'event':page==='Reminders'?'reminder':'task')+'" aria-label="Tambah rekod"',page==='Planner'?'':'plus','primary'+(page==='Planner'?' text-only':'')));
  const filter='<select class="filter scope-select" id="domain-select" aria-label="Tapis mengikut kumpulan">'+selectDomain(domain,'Semua kumpulan')+'</select>';
  const recovery=recoverySource?'<div class="storage-notice" role="alert"><p>Data tersimpan tidak dapat dibaca. Salinan asal masih dikekalkan; perubahan baharu tersedia dalam sesi ini sahaja.</p>'+button('Muat turun data asal','data-export-recovery')+button('Import sandaran','data-import')+'</div>':'';
  $('main').innerHTML=recovery+'<div class="page-head"><div>'+(page==='Overview'?'<p class="eyebrow">'+html(fullDate(today))+'</p>':'')+'<h1 tabindex="-1">'+html(title)+'</h1></div>'+(page==='Overview'||page==='Works'||page==='Settings'||isThesis(page)?'':filter)+'</div>'+({Overview:overview,Planner:planner,Events:eventsPage,Tasks:tasks,Knowledge:knowledge,Reminders:reminders,Notes:personalNotes,Master:thesisPage,PhD:thesisPage,Settings:settings,Group:groupPage,Works:worksPage,Ideas:ideasPage}[page])();
@@ -544,7 +547,7 @@ function overview() {
  const sunday=weekStart(today);
  const ranges={today:[today,today],week:[sunday,add(sunday,6)],next:[add(sunday,7),add(sunday,13)],month:[monthStart(today),monthEnd(today)]};
  const [start,end]=ranges[period];
- const items=itemsInRange(start,end,['task','event','reminder']);
+ const items=itemsInRange(start,end,['task','event','reminder']).filter(item=>!item.done);
  const groups=[
   {label:'Tugasan',type:'task',target:'Tasks',symbol:'task'},
   {label:'Acara',type:'event',target:'Events',symbol:'calendar'},
@@ -558,8 +561,7 @@ function overview() {
  }).join('');
  const deadlines=upcomingDeadlines(records,today,add(today,7));
  const upcoming='<div class="deadline-preview">'+section('Tarikh terdekat · 7 hari',deadlineRows(deadlines),'')+'</div>';
- const undated=records.filter(item=>item.type==='task'&&!item.date&&!item.done);
- return upcoming+'<div class="period-bar">'+tabs+'<span class="small muted">'+rangeLabel(start,end)+'</span></div><div class="metrics">'+metrics+'</div><div class="overview-lists">'+lists+'</div>'+(undated.length?'<div class="group-notes">'+section('Tanpa tarikh',taskRows(undated))+'</div>':'');
+ return upcoming+'<div class="period-bar">'+tabs+'<span class="small muted">'+rangeLabel(start,end)+'</span></div><div class="metrics">'+metrics+'</div><div class="overview-lists">'+lists+'</div>';
 }
 function groupPage() {
  const items=visible(records);
@@ -575,6 +577,8 @@ function selectDomain(current, emptyLabel) {
  return '<option value="">'+emptyLabel+'</option>'+domains.map(name=>'<option value="'+html(name)+'" '+(name===current?'selected':'')+'>'+html(name)+'</option>').join('');
 }
 function planner() {
+ const holidayCalendars=new Map();
+ const holidayOn=day=>{const year=Number(day.slice(0,4));if(!holidayCalendars.has(year))holidayCalendars.set(year,publicHolidays(year,holidayRegion));return holidayCalendars.get(year).get(day)||'';};
  const first=monthStart(focus);
  const start=view==='Month'?weekStart(first):weekStart(focus);
  const lastMonthDay=monthEnd(focus);
@@ -584,15 +588,17 @@ function planner() {
  const nav='<div class="toolbar"><div class="inline">'+button('','data-step="-1" aria-label="Sebelumnya: '+views[view]+'"','prev','icon')+button('','data-step="1" aria-label="Seterusnya: '+views[view]+'"','next','icon')+button('Hari ini','data-today')+'<h2>'+heading+'</h2></div><div class="inline">'+switches+'</div></div>';
  const [agendaStart,agendaEnd]=view==='Month'?[first,lastMonthDay]:view==='Week'?[start,add(start,6)]:[focus,focus];
  const items=itemsInRange(agendaStart,agendaEnd,['task','event','reminder']);
- const agenda='<div class="agenda-heading"><h2>Agenda perancang</h2><span class="small muted">'+rangeLabel(agendaStart,agendaEnd)+'</span></div><div class="planner-lists">'+section('Tugasan',taskRows(items.filter(item=>item.type==='task')),button('Tambah tugasan','data-new="task"','plus'))+section('Acara',scheduleRows(items.filter(item=>item.type==='event')),button('Tambah acara','data-new="event"','plus'))+section('Peringatan',taskRows(items.filter(item=>item.type==='reminder'),'Tiada tarikh akhir penting dalam tempoh ini.'),button('Tambah peringatan','data-new="reminder"','plus'))+'</div>';
- if(view==='Day') return '<section class="panel">'+nav+'</section>'+agenda;
+ const agenda='<div class="agenda-heading"><h2>Agenda perancang</h2><span class="small muted">'+rangeLabel(agendaStart,agendaEnd)+'</span></div><div class="planner-lists">'+section('Tugasan',taskRows(items.filter(item=>item.type==='task')),button('Tambah tugasan','data-new="task"'))+section('Acara',scheduleRows(items.filter(item=>item.type==='event')),button('Tambah acara','data-new="event"'))+section('Peringatan',taskRows(items.filter(item=>item.type==='reminder'),'Tiada tarikh akhir penting dalam tempoh ini.'),button('Tambah peringatan','data-new="reminder"'))+'</div>';
+ const legend='<div class="calendar-legend"><span class="calendar-key" aria-hidden="true"></span><span>Jumaat / cuti umum · '+html(holidayRegions[holidayRegion])+'</span>'+(!holidayYears.includes(Number(focus.slice(0,4)))?'<span>Cuti umum tahun ini belum tersedia.</span>':'')+'</div>';
+ if(view==='Day') return '<section class="panel'+(dateOf(focus).getUTCDay()===5||holidayOn(focus)?' calendar-rest':'')+'">'+nav+(holidayOn(focus)?'<p class="day-holiday">'+html(holidayOn(focus))+'</p>':'')+'</section>'+legend+agenda;
  const cells=Array.from({length:count},(_,i)=>{
   const day=add(start,i);
+  const holiday=holidayOn(day),rest=dateOf(day).getUTCDay()===5||Boolean(holiday);
   const items=scheduledOn(day,['task','event','reminder']);
   const limit=view==='Month'?2:7;
-  return '<div data-create-day="'+day+'" class="cell'+(day.slice(0,7)!==focus.slice(0,7)?' outside':'')+'"><button class="day-num'+(day===today?' today':'')+'" data-day="'+day+'" aria-label="Buka '+fullDate(day)+'">'+Number(day.slice(8))+'</button>'+button('+','data-create-day="'+day+'" aria-label="Tambah pada '+html(fullDate(day))+'"','','calendar-add')+items.slice(0,limit).map(item=>'<button class="event'+(item.type==='reminder'?' deadline':'')+'" data-edit="'+item.id+'" title="'+html(types[item.type]+' · '+item.title+' · '+domainName(item.domain)+(item.type==='task'?' · '+priorities[taskPriority(item)]:''))+'">'+priorityMarker(item,true)+html((item.type==='reminder'?'Deadline · ':item.time?item.time+' ':item.type==='task'?'Tugasan · ':'')+item.title)+(item.repeat?' <span class="recurrence" aria-label="Berulang setiap minggu">↻</span>':'')+'</button>').join('')+(items.length>limit?'<button class="event more" data-day="'+day+'">+'+(items.length-limit)+' lagi</button>':'')+'</div>';
+  return '<div data-create-day="'+day+'" tabindex="0" role="group" aria-label="'+html(fullDate(day)+(holiday?' · '+holiday:''))+'" class="cell'+(rest?' calendar-rest':'')+(holiday?' public-holiday':'')+(day.slice(0,7)!==focus.slice(0,7)?' outside':'')+'"><button class="day-num'+(day===today?' today':'')+'" data-day="'+day+'" aria-label="Buka '+fullDate(day)+'">'+Number(day.slice(8))+'</button>'+(holiday?'<span class="holiday-name" title="'+html(holiday)+'">'+html(holiday)+'</span>':'')+items.slice(0,limit).map(item=>'<button class="event'+(item.type==='reminder'?' deadline':'')+'" data-edit="'+item.id+'" title="'+html(types[item.type]+' · '+item.title+' · '+domainName(item.domain)+(item.type==='task'?' · '+priorities[taskPriority(item)]:''))+'">'+priorityMarker(item,true)+html((item.type==='reminder'?'Deadline · ':item.time?item.time+' ':item.type==='task'?'Tugasan · ':'')+item.title)+(item.repeat?' <span class="recurrence" aria-label="Berulang setiap minggu">↻</span>':'')+'</button>').join('')+(items.length>limit?'<button class="event more" data-day="'+day+'">+'+(items.length-limit)+' lagi</button>':'')+'</div>';
  }).join('');
- return '<section class="panel">'+nav+'<div class="calendar-scroll" tabindex="0" aria-label="Jadual kalendar"><div class="calendar '+view.toLowerCase()+'">'+['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map(day=>'<div class="weekday">'+day+'</div>').join('')+cells+'</div></div></section>'+agenda;
+ return '<section class="panel">'+nav+'<div class="calendar-scroll" tabindex="0" aria-label="Jadual kalendar"><div class="calendar '+view.toLowerCase()+'">'+['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map((day,index)=>'<div class="weekday'+(index===5?' calendar-rest':'')+'">'+day+'</div>').join('')+cells+'</div></div></section>'+legend+agenda;
 }
 function tasks() {
   const list=visible(records).filter(x=>x.type==='task'&&(taskFilter==='All'||Boolean(x.done)===(taskFilter==='Completed'))&&(taskDates!=='undated'||!x.date));
@@ -739,13 +745,18 @@ function noteForm(scope,index,chapter=0){
 }
 
 function settings() {
- const tabs={Domains:'Kumpulan',General:'Umum'};
+ const tabs={Domains:'Kumpulan',Completed:'Selesai',General:'Umum'};
  const switches='<div class="segments settings-tabs" aria-label="Bahagian tetapan">'+Object.entries(tabs).map(([id,label])=>'<button data-settings="'+id+'" class="'+(settingsTab===id?'active':'')+'" aria-pressed="'+(settingsTab===id)+'">'+label+'</button>').join('')+'</div>';
+ if(settingsTab==='Completed'){
+  const completed=sortItems(records.filter(item=>item.done),'date-desc',true);
+  return switches+'<div class="overview-lists completed-records">'+Object.entries(types).map(([type,label])=>section(label,taskRows(completed.filter(item=>item.type===type),'Tiada rekod selesai.'))).join('')+'</div>';
+ }
  if (settingsTab==='General') {
   const email=cloud.getSession()?.user?.email||'';
   const installBtn=isStandaloneApp()?'':button('Pasang aplikasi','data-install-app');
+  const calendarPanel=section('Cuti umum','<div class="detail"><label class="holiday-setting">Kalendar cuti<select class="filter" id="holiday-region">'+Object.entries(holidayRegions).map(([id,label])=>'<option value="'+id+'"'+(id===holidayRegion?' selected':'')+'>'+label+'</option>').join('')+'</select></label><p class="small muted">Takwim 2026–2027 · <a href="https://www.kabinet.gov.my/hari-kelepasan-am/" target="_blank" rel="noopener">Sumber rasmi BKPP JPM</a>. Tarikh perayaan tertakluk kepada pengumuman rasmi.</p></div>');
   const cloudPanel=section('Penyelarasan awan & akaun','<div class="detail"><p><strong>'+html(email)+'</strong></p><p class="small muted">'+html(syncStatus)+'</p>'+(syncError?'<p class="small sync-error" role="alert">'+html(syncError)+'</p>':'')+'<div class="backup-actions">'+button(syncBusy?'Menyelaraskan…':'Selaraskan sekarang','data-sync-now'+(syncBusy?' disabled':''))+installBtn+button('Log keluar','data-sign-out')+'</div></div>');
-  return switches+cloudPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
+  return switches+cloudPanel+'<div class="settings-gap"></div>'+calendarPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
  }
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
  return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
@@ -1064,6 +1075,7 @@ document.addEventListener('click',e=>{
 });
 document.addEventListener('change',e=>{
  const control=e.target;
+ if(control.id==='holiday-region'&&Object.hasOwn(holidayRegions,control.value)){holidayRegion=control.value;try{localStorage.setItem('khuttah-holiday-region-v1',holidayRegion);}catch{}notify('Kalendar cuti dikemas kini');return;}
  if('moveWork' in control.dataset){$('modal').close();moveStickyNote(control.dataset.moveWork,control.value);return;}
  if('stickyColor' in control.dataset){const item=notes.find(note=>note.id===control.dataset.stickyColor&&['Karya','Idea rambang'].includes(note.kind));if(item&&Object.hasOwn(workColors,control.value)){item.color=control.value;item.updatedAt=new Date().toISOString();$('modal').close();save('Warna nota dikemas kini');}return;}
  if(control.id==='book-subject-filter'){bookSubjectFilter=control.value;const book=library.books.find(item=>item.id===selectedWorkBook);if(bookSubjectFilter&&book&&!book.subjects.includes(bookSubjectFilter))selectedWorkBook='';render();$('book-subject-filter').focus();return;}
@@ -1121,6 +1133,7 @@ document.addEventListener('submit',event=>{
  delete quickWorkDrafts[selectedWorkBook||'inbox'];persistQuickWorkDraft();save(book?'Catatan disimpan dalam '+book.title:'Catatan disimpan');$('quick-work-text')?.focus();
 });
 document.addEventListener('keydown',e=>{
+ if((e.key==='Enter'||e.key===' ')&&e.target.matches('.cell[data-create-day]')){e.preventDefault();dayCreateDialog(e.target.dataset.createDay);return;}
  if(e.key==='Enter'&&e.target.matches('[data-tag-input]')){e.preventDefault();addInlineTag(e.target.closest('fieldset').querySelector('[data-inline-tag]'));return;}
  if((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='k'){
   if (!cloud.getSession()) return;

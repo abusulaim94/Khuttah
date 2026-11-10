@@ -137,8 +137,10 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .check-label{display:flex!important;align-items:center;gap:8px!important;font-weight:450!important}
 .dialog-body .check-label input{width:auto;accent-color:var(--ink)}
 .cell{position:relative;cursor:pointer}.cell:hover{background:#f8f8fa}.cell .event,.cell .day-num{position:relative}
-.calendar-add{float:right;min-height:28px;width:28px;padding:2px;border-color:transparent;background:transparent;color:var(--muted);font-size:18px;font-weight:400}
-.calendar-add:hover{background:#e4e4e7;color:var(--ink)}
+.cell.calendar-rest,.cell.outside.calendar-rest,.weekday.calendar-rest,.panel.calendar-rest .toolbar{background:#f0f0f2}.cell.calendar-rest:hover{background:#e9e9ed}
+.top .text-only .new-label{display:inline}
+.cell:focus-visible{outline:2px solid #71717a;outline-offset:-2px}.holiday-name{display:block;font-size:10px;line-height:1.4;color:var(--sub);white-space:nowrap;overflow:hidden;text-overflow:ellipsis;margin:2px 0 4px}
+.calendar-legend{display:flex;align-items:center;flex-wrap:wrap;gap:6px;font-size:11px;color:var(--muted);margin:9px 0 14px}.calendar-key{width:12px;height:12px;border:1px solid var(--border);border-radius:3px;background:#f0f0f2}.day-holiday{padding:0 15px 12px;font-size:12px}.holiday-setting{display:grid;gap:6px;max-width:300px;font-size:12px;margin-bottom:10px}.settings-tabs{flex-wrap:wrap}
 .quick-create .btn{justify-content:flex-start;min-height:46px}
 .deadline-rows{max-height:360px;overflow:auto}
 .deadline-rows>.row>svg{margin:0 1px;width:16px;height:16px;color:var(--sub)}

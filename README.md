@@ -43,7 +43,9 @@ Fail prototaip dikekalkan untuk rujukan dan eksport data lama. Perubahan baharu 
 **Fungsi semasa**
 
 - Ringkasan semua kumpulan, dengan tugasan tertunggak serta tarikh tugasan, acara dan peringatan dalam tujuh hari akan datang. Acara lama tidak dianggap tertunggak; acara berulang menggunakan kemunculan seterusnya.
-- Perancang Bulan, Minggu dan Hari. Klik ruang kosong atau butang `+` pada tarikh untuk menambah tugasan, acara atau peringatan dengan tarikh siap diisi.
+- Ringkasan hanya memaparkan rekod belum selesai yang bertarikh. Urusan selesai boleh dirujuk atau dibuka semula melalui Tetapan → Selesai, dan kekal dalam menu asal.
+- Perancang Bulan, Minggu dan Hari. Klik ruang kosong pada tarikh untuk menambah tugasan, acara atau peringatan dengan tarikh siap diisi; papan kekunci menyokong Enter/Space pada petak tarikh.
+- Jumaat dan cuti umum diwarnakan kelabu muda. Takwim rasmi Kelantan 2026–2027 digunakan secara lalai, termasuk cuti gantian mengikut pekeliling negeri. Tetapan → Umum turut menyediakan pilihan Persekutuan, Selangor dan Kuala Lumpur. Pilihan kalendar disimpan pada pelayar ini. Lihat [sumber dan penyelenggaraan takwim](docs/HOLIDAYS.md).
 - Tugasan boleh disimpan tanpa tarikh, ditapis secara berasingan, kemudian diberikan tarikh atau ditunda.
 - Nota dalam menu utama, dengan tajuk, bold, italic, underline, senarai, checklist, petikan dan undo/redo. Format disimpan bersama teks biasa dan boleh dipulihkan daripada draf atau sandaran.
 - Tag boleh ditambah semasa menulis, dinamakan semula dan dipadam. Suntingan tag turut mengemas kini catatan dan draf berkaitan.
