@@ -108,7 +108,15 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .install-dismiss:hover{color:#fff}
 
 .sr-only{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip:rect(0,0,0,0);white-space:nowrap;border:0}
-.bottom-links{grid-template-columns:repeat(5,minmax(0,1fr))}
+.bottom-links{grid-template-columns:repeat(6,minmax(0,1fr))}
+.quick-add-nav{font-weight:650!important;color:var(--ink)!important}
+.quick-add-plus{display:grid;place-items:center;width:28px;height:28px;border-radius:8px;background:var(--ink);color:white}
+.quick-add-plus svg{width:16px!important;height:16px!important}
+.mobile-quick-btn{display:none}
+@media(max-width:1100px), (max-width:1400px) and (pointer:coarse){.mobile-quick-btn{display:inline-flex}}
+.quick-pick-text{display:grid;text-align:left;gap:2px}
+.quick-pick-text small{font-weight:400;font-size:11px}
+.quran-rule-note{padding:10px 15px 12px;margin:0}
 .list-controls,.board-toolbar,.work-categories{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .board-toolbar{justify-content:space-between;margin:14px 0}
 .work-categories{margin-bottom:14px}

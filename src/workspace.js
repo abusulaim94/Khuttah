@@ -1,7 +1,7 @@
 export const workCategories = ['Pembetulan', 'Idea cetakan seterusnya', 'Idea buku', 'Catatan'];
 export const workColors = {white: 'Putih', yellow: 'Kuning pastel', rose: 'Merah jambu pastel', blue: 'Biru pastel', green: 'Hijau pastel', purple: 'Ungu pastel'};
-export const tagScopes = ['Notes', 'Knowledge', 'Events', 'Works', 'Ideas'];
-export const tagScopeOf = item => item.type ? item.type === 'event' ? 'Events' : null : item.kind === 'Karya' ? 'Works' : item.kind === 'Idea rambang' ? 'Ideas' : ['Rujukan', 'Penyelidikan'].includes(item.kind) ? 'Knowledge' : 'Notes';
+export const tagScopes = ['Notes', 'Knowledge', 'Events', 'Works', 'Ideas', 'Copywriting'];
+export const tagScopeOf = item => item.type ? item.type === 'event' ? 'Events' : null : item.kind === 'Karya' ? 'Works' : item.kind === 'Idea rambang' ? 'Ideas' : item.kind === 'Copywriting' ? 'Copywriting' : ['Rujukan', 'Penyelidikan'].includes(item.kind) ? 'Knowledge' : 'Notes';
 export function initialLibrary() {
   return {version: 1, subjects: ['Tajwid', 'Akhlak', 'Terjemahan', 'Sirah'], books: [
     {id: 'book-nota-mudah', title: 'Nota Mudah Makhraj & Sifat Huruf', status: 'published', subjects: ['Tajwid']},

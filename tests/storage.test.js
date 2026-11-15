@@ -51,3 +51,34 @@ test('nota tesis mengekalkan bab dan menolak bab di luar julat', () => {
   source.notes[0].chapter = 9;
   assert.throws(() => normaliseState(source));
 });
+
+test('pelajar Al-Quran dan sesi kelas serta nota Copywriting monokrom dipelihara dalam sandaran', () => {
+  const source = state();
+  source.notes.push({
+    id: 'copy-1',
+    title: 'Iklan Kelas Dewasa',
+    note: 'Pengambilan baharu dibuka',
+    kind: 'Copywriting',
+    color: 'rose',
+    pinned: true,
+    archived: false,
+    tags: ['Iklan', 'Kempen'],
+  });
+  source.quranStudents = [{
+    id: 'qs-1',
+    name: 'Ustaz Ahmad',
+    note: 'Talaqqi Surah al-Baqarah',
+    sessions: [
+      {id: 'qses-1', date: '2026-11-03', time: '20:30', note: 'Minggu 1'},
+      {id: 'qses-2', date: '2026-11-10', time: '20:30', note: 'Minggu 2'},
+    ],
+  }];
+  const normalised = normaliseState(source);
+  const copyNote = normalised.notes.find(n => n.id === 'copy-1');
+  assert.equal(copyNote.color, 'white');
+  assert.equal(copyNote.pinned, true);
+  assert.deepEqual(normalised.tags.Copywriting, ['Iklan', 'Kempen']);
+  assert.equal(normalised.quranStudents.length, 1);
+  assert.equal(normalised.quranStudents[0].sessions.length, 2);
+  assert.deepEqual(parseBackup(JSON.stringify(createBackup(normalised))), normalised);
+});
