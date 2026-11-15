@@ -116,6 +116,7 @@ export function normaliseState(value) {
     });
     return {
       id: studentId,
+      code: optionalText(entry.code, 'kod pelajar', 24).trim(),
       name,
       note: optionalText(entry.note, 'catatan pelajar', 240),
       sessions,
@@ -139,6 +140,7 @@ export function normaliseState(value) {
     }),
     groupLayoutVersion: value.groupLayoutVersion === 1 ? 1 : 0,
     demoCleanupVersion: value.demoCleanupVersion === 1 ? 1 : 0,
+    quranSeedVersion: value.quranSeedVersion === 1 ? 1 : 0,
   };
 }
 

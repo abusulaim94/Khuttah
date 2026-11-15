@@ -1,6 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import { createBackup, parseBackup, normaliseState, validDate } from '../src/storage.js';
+import { initialQuranStudents, ensureQuranRoster } from '../src/workspace.js';
 
 const state = () => ({
   records: [{id: 't1', type: 'task', title: 'Semak laporan', domain: 'Peribadi', date: '2026-11-08', priority: 'high'}],
@@ -81,4 +82,29 @@ test('pelajar Al-Quran dan sesi kelas serta nota Copywriting monokrom dipelihara
   assert.equal(normalised.quranStudents.length, 1);
   assert.equal(normalised.quranStudents[0].sessions.length, 2);
   assert.deepEqual(parseBackup(JSON.stringify(createBackup(normalised))), normalised);
+});
+
+test('senarai 13 pelajar aktif Kelas Al-Quran dimuatkan dan Che Hussin serta Norzayah dikecualikan', () => {
+  const roster = initialQuranStudents();
+  assert.equal(roster.length, 13);
+  assert.ok(roster.some(s => s.code === '011' && s.name === 'ALI BIN MAHMOOD'));
+  assert.ok(roster.some(s => s.code === '269' && s.name === 'AISYAH'));
+  assert.ok(!roster.some(s => s.name.includes('CHE HUSSIN')));
+  assert.ok(!roster.some(s => s.name.includes('NORZAYAH')));
+
+  const stateWithStopped = ensureQuranRoster({
+    ...state(),
+    quranStudents: [
+      { id: 'qs-179', code: '179', name: 'CHE HUSSIN IBRAHIM', note: '', sessions: [] },
+      { id: 'qs-184', code: '184', name: 'NORZAYAH ABDULLAH', note: '', sessions: [] },
+      { id: 'qs-011', code: '011', name: 'ALI BIN MAHMOOD', note: 'Aktif', sessions: [{ id: 's1', date: '2026-11-05', time: '', note: '' }] },
+    ],
+    quranSeedVersion: 0,
+  });
+  assert.equal(stateWithStopped.quranStudents.length, 13);
+  assert.ok(!stateWithStopped.quranStudents.some(s => s.name.includes('CHE HUSSIN')));
+  assert.ok(!stateWithStopped.quranStudents.some(s => s.name.includes('NORZAYAH')));
+  const ali = stateWithStopped.quranStudents.find(s => s.code === '011');
+  assert.equal(ali.sessions.length, 1);
+  assert.equal(stateWithStopped.quranSeedVersion, 1);
 });

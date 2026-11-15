@@ -2,6 +2,44 @@ export const workCategories = ['Pembetulan', 'Idea cetakan seterusnya', 'Idea bu
 export const workColors = {white: 'Putih', yellow: 'Kuning pastel', rose: 'Merah jambu pastel', blue: 'Biru pastel', green: 'Hijau pastel', purple: 'Ungu pastel'};
 export const tagScopes = ['Notes', 'Knowledge', 'Events', 'Works', 'Ideas', 'Copywriting'];
 export const tagScopeOf = item => item.type ? item.type === 'event' ? 'Events' : null : item.kind === 'Karya' ? 'Works' : item.kind === 'Idea rambang' ? 'Ideas' : item.kind === 'Copywriting' ? 'Copywriting' : ['Rujukan', 'Penyelidikan'].includes(item.kind) ? 'Knowledge' : 'Notes';
+export const inactiveQuranStudents = ['CHE HUSSIN IBRAHIM', 'NORZAYAH ABDULLAH'];
+export function initialQuranStudents() {
+  return [
+    {id: 'qs-011', code: '011', name: 'ALI BIN MAHMOOD', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-074', code: '074', name: 'ASIAH BINTI MUNADI', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-088', code: '088', name: 'ROZILAWATI BINTI ABDULLAH', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-098', code: '098', name: 'MARIAM BINTI MOHAMMAD', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-116', code: '116', name: 'CHE NORMA ISMAIL', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-118', code: '118', name: 'MARIDAH BINTI BAKAR', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-136', code: '136', name: 'NORMA BINTI SHAFIE', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-180', code: '180', name: 'RAJYAH MOHAMED', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-191', code: '191', name: 'ANIZAH BINTI ISMAIL', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-195', code: '195', name: 'TUAN ROHANI BINTI RAJA SULAIMAN', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-265', code: '265', name: 'ZURIYATI', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-M015', code: 'M015', name: 'SITI NORBAYA', note: '', sessions: [], createdAt: '', updatedAt: ''},
+    {id: 'qs-269', code: '269', name: 'AISYAH', note: '', sessions: [], createdAt: '', updatedAt: ''},
+  ];
+}
+export function ensureQuranRoster(state) {
+  const isRemoved = name => {
+    const upper = String(name ?? '').trim().toUpperCase();
+    return inactiveQuranStudents.some(stopped => upper === stopped || upper.includes('CHE HUSSIN') || upper.includes('NORZAYAH'));
+  };
+  const current = Array.isArray(state.quranStudents) ? state.quranStudents.filter(student => !isRemoved(student.name)) : [];
+  if (state.quranSeedVersion !== 1) {
+    for (const seed of initialQuranStudents()) {
+      const existing = current.find(item => item.id === seed.id || item.name.toUpperCase() === seed.name.toUpperCase());
+      if (existing) {
+        if (!existing.code) existing.code = seed.code;
+      } else {
+        current.push(structuredClone(seed));
+      }
+    }
+    state.quranSeedVersion = 1;
+  }
+  state.quranStudents = current;
+  return state;
+}
 export function initialLibrary() {
   return {version: 1, subjects: ['Tajwid', 'Akhlak', 'Terjemahan', 'Sirah'], books: [
     {id: 'book-nota-mudah', title: 'Nota Mudah Makhraj & Sifat Huruf', status: 'published', subjects: ['Tajwid']},

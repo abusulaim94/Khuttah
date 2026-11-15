@@ -117,6 +117,39 @@ dialog:has(#personal-note-form){width:min(940px,calc(100% - 24px))}
 .quick-pick-text{display:grid;text-align:left;gap:2px}
 .quick-pick-text small{font-weight:400;font-size:11px}
 .quran-rule-note{padding:10px 15px 12px;margin:0}
+.quran-status-grid{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px;margin:14px 0 12px}
+.quran-status-card{display:grid;gap:6px;text-align:left;padding:12px 14px;border-radius:12px;border:1.5px solid var(--border);background:white;transition:transform .12s,box-shadow .12s,border-color .12s}
+.quran-status-card:hover{transform:translateY(-1px)}
+.quran-status-card.active{outline:2px solid var(--ink);outline-offset:1px}
+.quran-status-top{display:flex;align-items:center;gap:7px;font-size:12px;font-weight:600}
+.quran-status-card strong{font-size:22px;font-weight:700;line-height:1.1}
+.quran-status-card small{font-size:11px;opacity:.85}
+.quran-dot{width:9px;height:9px;border-radius:50%;flex:none;display:inline-block}
+.quran-pill,.quran-nav-badge{display:inline-flex;align-items:center;gap:6px;padding:3px 9px;border-radius:999px;font-size:11px;font-weight:600;border:1px solid transparent;line-height:1.3}
+.quran-nav-badge{margin-left:auto;padding:2px 7px;font-size:10px}
+.quran-red{background:#fef2f2;border-color:#fca5a5;color:#b91c1c}
+.quran-red .quran-dot{background:#dc2626}
+.quran-yellow{background:#fffbeb;border-color:#fcd34d;color:#b45309}
+.quran-yellow .quran-dot{background:#d97706}
+.quran-blue{background:#eff6ff;border-color:#93c5fd;color:#1d4ed8}
+.quran-blue .quran-dot{background:#2563eb}
+.quran-green{background:#f0fdf4;border-color:#86efac;color:#15803d}
+.quran-green .quran-dot{background:#16a34a}
+.quran-summary-bar{display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px;padding:10px 14px;margin-bottom:14px;border:1px solid var(--border);border-radius:10px;background:white;font-size:12px}
+.quran-student-row{align-items:center;gap:12px;border-left:4px solid transparent;padding-left:12px}
+.quran-row-red{border-left-color:#dc2626;background:#fffafa}
+.quran-row-yellow{border-left-color:#d97706;background:#fffdf7}
+.quran-row-blue{border-left-color:#2563eb;background:#f8fbff}
+.quran-row-green{border-left-color:#16a34a;background:#f7fef9}
+.quran-student-head{display:flex;align-items:center;flex-wrap:wrap;gap:8px;margin-bottom:4px}
+.quran-code{display:inline-block;padding:1px 6px;border-radius:5px;background:var(--soft);border:1px solid var(--border);font-size:11px;font-weight:600;color:var(--sub);margin-right:6px}
+.quran-ticks{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
+.quran-tick{display:inline-flex;align-items:center;gap:7px;padding:7px 11px;border-radius:9px;border:1.5px solid #d4d4d8;background:white;color:var(--ink);font-size:12px;font-weight:550;min-height:38px;transition:background .12s,border-color .12s}
+.quran-tick:hover{border-color:#71717a;background:var(--soft)}
+.quran-tick .tick-box{display:inline-grid;place-items:center;width:18px;height:18px;border-radius:5px;border:1.5px solid #a1a1aa;background:white;font-size:12px;font-weight:700;color:transparent}
+.quran-tick.checked{background:#f0fdf4;border-color:#86efac;color:#14532d}
+.quran-tick.checked .tick-box{background:#16a34a;border-color:#16a34a;color:white}
+@media(max-width:860px){.quran-status-grid{grid-template-columns:repeat(2,minmax(0,1fr))}.quran-student-row{flex-direction:column;align-items:stretch}.quran-ticks{width:100%}.quran-tick{flex:1;justify-content:center}}
 .list-controls,.board-toolbar,.work-categories{display:flex;align-items:center;flex-wrap:wrap;gap:8px}
 .board-toolbar{justify-content:space-between;margin:14px 0}
 .work-categories{margin-bottom:14px}
