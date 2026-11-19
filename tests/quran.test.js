@@ -1,7 +1,7 @@
 import test from 'node:test';
 import assert from 'node:assert/strict';
 import {normaliseState, createBackup, parseBackup} from '../src/storage.js';
-import {defaultClassFee, summariseQuranMonth} from '../src/quran.js';
+import {defaultClassFee, quranStatus, summariseQuranMonth, filterQuranStudents} from '../src/quran.js';
 
 const state = () => ({records: [], notes: [], projects: [], domains: [], quranStudents: [{id: 's1', name: 'Ali', sessions: [{id: 'c1', date: '2026-11-04'}]}]});
 
@@ -31,4 +31,30 @@ test('ringkasan bulanan mengira jumlah RM19 bagi setiap kelas dalam bulan yang d
   assert.equal(summariseQuranMonth(students, '2026-12').earnings, 0);
   assert.equal(summariseQuranMonth([], '2026-11').remaining, 0);
   assert.equal(summariseQuranMonth([], '2026-11').earnings, 0);
+});
+
+test('empat warna status kelas dan tapis dinamik mengikut kelas, carian dan susunan berfungsi', () => {
+  assert.equal(quranStatus(0).color, 'red');
+  assert.equal(quranStatus(1).color, 'orange');
+  assert.equal(quranStatus(2).color, 'blue');
+  assert.equal(quranStatus(3).color, 'green');
+  assert.equal(quranStatus(4).color, 'green');
+  const students = [
+    {id: 's0', code: '010', name: 'Zainab', sessions: []},
+    {id: 's1', code: '002', name: 'Ali', sessions: [{id: 'a1', date: '2026-11-01'}]},
+    {id: 's2', code: '005', name: 'Bakar', sessions: [{id: 'b1', date: '2026-11-01'}, {id: 'b2', date: '2026-11-08'}]},
+    {id: 's3', code: '001', name: 'Siti', sessions: ['01', '08', '15'].map(d => ({id: 'c' + d, date: '2026-11-' + d}))},
+  ];
+  const summary = summariseQuranMonth(students, '2026-11');
+  assert.equal(summary.remaining, 6);
+  assert.equal(summary.badgeColor, 'red');
+  assert.deepEqual(summary.counts, {all: 4, pending: 3, '0': 1, '1': 1, '2': 1, '3': 1});
+  assert.deepEqual(filterQuranStudents(summary.students, {filter: '0'}).map(x => x.student.id), ['s0']);
+  assert.deepEqual(filterQuranStudents(summary.students, {filter: '1'}).map(x => x.student.id), ['s1']);
+  assert.deepEqual(filterQuranStudents(summary.students, {filter: '2'}).map(x => x.student.id), ['s2']);
+  assert.deepEqual(filterQuranStudents(summary.students, {filter: '3'}).map(x => x.student.id), ['s3']);
+  assert.deepEqual(filterQuranStudents(summary.students, {search: '005'}).map(x => x.student.id), ['s2']);
+  assert.deepEqual(filterQuranStudents(summary.students, {sort: 'name-asc'}).map(x => x.student.id), ['s1', 's2', 's3', 's0']);
+  assert.deepEqual(filterQuranStudents(summary.students, {sort: 'code-asc'}).map(x => x.student.id), ['s3', 's1', 's2', 's0']);
+  assert.deepEqual(filterQuranStudents(summary.students, {sort: 'count-desc'}).map(x => x.student.id), ['s3', 's2', 's1', 's0']);
 });
