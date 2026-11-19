@@ -1,5 +1,4 @@
 import {cleanTagNames, tagScopeOf, tagScopes, workCategories, workColors, initialLibrary} from './workspace.js';
-import {defaultMonthlyFee} from './quran.js';
 
 export const BACKUP_FORMAT = 'khuttah-backup';
 export const BACKUP_VERSION = 1;
@@ -13,7 +12,6 @@ const optionalText = (value, label, max) => value == null ? '' : text(value, lab
 const id = value => typeof value === 'string' && /^[a-zA-Z0-9_-]{1,128}$/.test(value) ? value : fail('ID');
 const names = (value, label, max) => list(value, label).map(name => text(name, label, max));
 const timestamp = value => value == null || value === '' ? '' : typeof value === 'string' && /^\d{4}-\d{2}-\d{2}T/.test(value) && Number.isFinite(Date.parse(value)) ? value : fail('tarikh kemas kini');
-const money = value => typeof value === 'number' && Number.isFinite(value) && value >= 0 && value <= 99999.99 && Math.abs(value * 100 - Math.round(value * 100)) < 0.000001 ? value : fail('bayaran kelas');
 
 export function validDate(value) {
   if (typeof value !== 'string' || !/^\d{4}-\d{2}-\d{2}$/.test(value)) return false;
@@ -116,22 +114,12 @@ export function normaliseState(value) {
         note: optionalText(session.note, 'catatan kelas', 240),
       };
     });
-    const paymentMonths = new Set();
-    const payments = list(entry.payments ?? [], 'bayaran bulanan').map(payment => {
-      object(payment, 'bayaran bulanan');
-      if (typeof payment.month !== 'string' || !/^\d{4}-\d{2}$/.test(payment.month) || !validDate(payment.month + '-01') || paymentMonths.has(payment.month)) fail('bulan bayaran');
-      if (!validDate(payment.date)) fail('tarikh bayaran');
-      paymentMonths.add(payment.month);
-      return {month: payment.month, amount: money(payment.amount), date: payment.date};
-    });
     return {
       id: studentId,
       code: optionalText(entry.code, 'kod pelajar', 24).trim(),
       name,
       note: optionalText(entry.note, 'catatan pelajar', 240),
       sessions,
-      monthlyFee: money(entry.monthlyFee ?? defaultMonthlyFee),
-      payments,
       createdAt: timestamp(entry.createdAt),
       updatedAt: timestamp(entry.updatedAt),
     };

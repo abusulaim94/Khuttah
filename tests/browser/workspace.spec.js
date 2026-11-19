@@ -514,13 +514,15 @@ test('tema cerah/gelap kekal, mengikut peranti dan modal mobile mengekalkan huru
   await expect(page.locator('html')).toHaveAttribute('data-theme','light');
 });
 
-test('kelas dan bayaran bulanan berkadar tersuai disimpan, diselaraskan dan boleh dibatalkan', async ({page}) => {
+test('kelas Al-Quran mengira jumlah RM19 setiap kelas secara automatik dalam ringkasan', async ({page}) => {
   const month=today.slice(0,7),state=seed();
   state.quranSeedVersion=1;
-  state.quranStudents=[{id:'student-a',name:'Ali bin Ahmad',code:'001',sessions:[]},{id:'student-b',name:'Siti Aminah',code:'002',monthlyFee:30,sessions:['01','02','03'].map(day=>({id:'class-'+day,date:month+'-'+day}))}];
+  state.quranStudents=[{id:'student-a',name:'Ali bin Ahmad',code:'001',sessions:[]},{id:'student-b',name:'Siti Aminah',code:'002',sessions:['01','02','03'].map(day=>({id:'class-'+day,date:month+'-'+day}))}];
   const remote=await setup(page,state);
   await go(page,'QuranClass');
-  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','3','3','RM0.00']);
+  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','3','3','RM57.00']);
+  await expect(page.locator('.quran-dashboard .metric .muted').last()).toHaveText('3 kelas × RM19');
+  await expect(page.locator('[data-quran-payment]')).toHaveCount(0);
   const ali=page.locator('.quran-student-row').filter({has:page.locator('[data-open-student="student-a"]')});
   await expect(ali.locator('.quran-pill')).toHaveText('Baki 3 kelas');
   await expect(ali).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
@@ -529,53 +531,38 @@ test('kelas dan bayaran bulanan berkadar tersuai disimpan, diselaraskan dan bole
   await page.locator('#quran-tick-form [type="submit"]').click();
   await expect(ali.locator('.checked')).toHaveCount(1);
   await expect(ali.locator('.quran-pill')).toHaveText('Baki 2 kelas');
+  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','4','2','RM76.00']);
+  await expect(page.locator('.quran-dashboard .metric .muted').last()).toHaveText('4 kelas × RM19');
   await ali.locator('.checked').click();
   await page.locator('#quran-tick-form [name="date"]').fill(month+'-02');
   await page.locator('#quran-tick-form [type="submit"]').click();
   expect((await saved(page)).quranStudents[0].sessions[0].date).toBe(month+'-02');
-  await ali.locator('[data-open-student]').click();
-  await page.locator('[data-edit-quran-student]').click();
-  await expect(page.locator('[name="monthlyFee"]')).toHaveValue('19');
-  await page.locator('[name="monthlyFee"]').fill('25.50');
-  await page.locator('#quran-student-form [type="submit"]').click();
-  await ali.locator('[data-quran-payment]').click();
-  await expect(page.locator('[name="amount"]')).toHaveValue('25.5');
-  await page.locator('#quran-payment-form [type="submit"]').click();
-  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM25.50');
-  await expect.poll(()=>remote().quranStudents[0].payments?.[0]?.amount).toBe(25.5);
+  await expect.poll(()=>remote().quranStudents[0].sessions?.[0]?.date).toBe(month+'-02');
   await page.locator('[data-quran-month="1"]').click();
   await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','0','6','RM0.00']);
-  await expect(ali.locator('[data-quran-payment]')).toHaveText('Rekod bayaran');
   await page.locator('[data-quran-month="-1"]').click();
-  await ali.locator('[data-open-student]').click();
-  await page.locator('[data-edit-quran-student]').click();
-  await page.locator('[name="monthlyFee"]').fill('30');
-  await page.locator('#quran-student-form [type="submit"]').click();
-  await expect(ali.locator('[data-quran-payment]')).toHaveText('Sudah bayar · RM25.50');
-  await ali.locator('[data-quran-payment]').click();
-  await page.locator('[data-remove-quran-payment]').click();
-  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM0.00');
+  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','4','2','RM76.00']);
+  await ali.locator('.checked').click();
+  await page.locator('[data-delete-quran-session]').click();
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM57.00');
   await page.locator('[data-undo]').click();
-  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM25.50');
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM76.00');
   await page.locator('[data-quran-filter="3"]').click();
   await expect(page.locator('.quran-student-row')).toHaveCount(1);
   await expect(page.locator('.quran-student-row')).toContainText('Siti Aminah');
   await page.locator('[data-quran-filter="all"]').click();
-  await expect.poll(()=>remote().quranStudents[0].monthlyFee).toBe(30);
-  await expect.poll(()=>remote().quranStudents[0].payments.length).toBe(1);
   await page.reload();await go(page,'QuranClass');
-  await expect(ali.locator('[data-quran-payment]')).toHaveText('Sudah bayar · RM25.50');
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM76.00');
   for(const [width,height] of [[1440,1000],[1024,768],[390,844],[320,740]]){
     await page.setViewportSize({width,height});
     expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
     await page.screenshot({path:'.local/qa/quran-'+width+'.png',fullPage:true});
   }
-  await ali.locator('[data-quran-payment]').click();
-  expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
-  await page.locator('#modal [data-close]').first().click();
   await ali.locator('[data-open-student]').click();
+  await expect(page.locator('[data-quran-payment]')).toHaveCount(0);
   expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
   await page.locator('[data-edit-quran-student]').click();
+  await expect(page.locator('[name="monthlyFee"]')).toHaveCount(0);
   expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
 });
 

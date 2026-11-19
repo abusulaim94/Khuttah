@@ -252,7 +252,7 @@ dialog :is(input,textarea,select,[contenteditable],h2,h3,label,summary){text-tra
 .quran-dashboard .metric strong{font-size:26px;margin:10px 0 4px;overflow-wrap:anywhere}
 .quran-filters{display:flex;flex-wrap:wrap;gap:4px}.quran-filters .active{background:var(--soft);border-color:var(--border)}
 .quran-rows{padding:0 18px}
-.quran-student-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(300px,1.25fr) 170px;align-items:center;gap:20px;padding:20px 0;border-bottom:1px solid var(--border)}
+.quran-student-row{display:grid;grid-template-columns:minmax(180px,1fr) minmax(300px,1.35fr);align-items:center;gap:20px;padding:20px 0;border-bottom:1px solid var(--border)}
 .quran-student-row:last-child{border-bottom:0}
 .quran-student-info{min-width:0}.quran-student-info>p{margin-top:8px;overflow-wrap:anywhere}
 .quran-name-line{display:flex;align-items:baseline;gap:8px}.quran-name-line .row-title{font-size:14px;font-weight:600;line-height:1.6}
@@ -269,14 +269,12 @@ dialog :is(input,textarea,select,[contenteditable],h2,h3,label,summary){text-tra
 .tick-label{display:grid;gap:3px;min-width:0}.tick-label strong{font-size:12px;font-weight:500}
 .tick-label time{font-size:14px;white-space:nowrap;font-variant-numeric:tabular-nums}.tick-label small{font-size:11px;color:var(--muted);line-height:1.3}
 .quran-extra{grid-column:1/-1;justify-self:start;min-height:32px}
-.quran-fee{display:grid;gap:8px;justify-items:start;min-width:0}.quran-fee>span{font-size:14px;font-variant-numeric:tabular-nums}.quran-fee small{font-size:12px}
-.quran-fee .btn{max-width:100%;white-space:normal;text-align:left;font-weight:500}.quran-fee .quran-paid{color:#436651;background:#eaf1ed;border-color:transparent}
 :root[data-theme=dark] .quran-pending{background:#393226;color:#e2c99e}
-:root[data-theme=dark] :is(.quran-complete,.quran-paid){background:#293b31;color:#b5d5c0}
+:root[data-theme=dark] .quran-complete{background:#293b31;color:#b5d5c0}
 :root[data-theme=dark] .checked .tick-box{background:#31483b;color:#c6e1d0;border-color:#6b9179}
-@media(max-width:1100px){.quran-student-row{grid-template-columns:minmax(0,1fr) 170px;gap:14px}.quran-student-info{grid-column:1;grid-row:1}.quran-fee{grid-column:2;grid-row:1}.quran-ticks{grid-column:1/-1;grid-row:2;max-width:480px}}
+@media(max-width:860px){.quran-student-row{grid-template-columns:minmax(0,1fr);gap:14px}.quran-ticks{max-width:480px}}
 @media(max-width:760px){.quran-dashboard{grid-template-columns:repeat(2,minmax(0,1fr));gap:8px}.quran-dashboard .metric{padding:12px}.quran-dashboard .metric strong{font-size:24px}.quran-rows{padding:0 12px}}
-@media(max-width:540px){.quran-student-row{grid-template-columns:minmax(0,1fr);gap:12px}.quran-fee{grid-column:1;grid-row:3;display:flex;align-items:center;justify-content:space-between;gap:8px}.quran-ticks{width:100%;max-width:none}.quran-tick{gap:6px;padding:8px 6px}.quran-toolbar{gap:6px}.quran-toolbar .inline{gap:6px}.quran-toolbar h2{font-size:14px}.quran-dashboard .metric-top{font-size:12px}.quran-filters .btn{padding:6px 8px}}
+@media(max-width:540px){.quran-student-row{gap:12px}.quran-ticks{width:100%;max-width:none}.quran-tick{gap:6px;padding:8px 6px}.quran-toolbar{gap:6px}.quran-toolbar .inline{gap:6px}.quran-toolbar h2{font-size:14px}.quran-dashboard .metric-top{font-size:12px}.quran-filters .btn{padding:6px 8px}}
 @media(min-width:900px) and (orientation:landscape){.mobile-quick-btn{display:none}}
 @media(max-width:760px){.mobile-quick-btn .new-label{display:none}}
 .top .crumb{min-width:0}.top .crumb strong{overflow:hidden;text-overflow:ellipsis;white-space:nowrap}

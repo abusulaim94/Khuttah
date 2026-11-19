@@ -7,7 +7,7 @@ import {createNoteEditor} from './editor.js';
 import {installBookDragging} from './book-drag.js';
 import {publicHolidays, holidayRegions, holidayYears, defaultHolidayRegion} from './holidays.js';
 import {getTheme, setTheme, themeOptions} from './theme.js';
-import {defaultMonthlyFee, monthlyPayment, summariseQuranMonth} from './quran.js';
+import {defaultClassFee, summariseQuranMonth} from './quran.js';
 let noteEditor=null;
 
 const drafts=createDraftController();
@@ -498,11 +498,11 @@ function quranClassPage(){
   const monthHeading=dateLabel(quranMonth+'-01',{month:'long',year:'numeric'});
   const summary=summariseQuranMonth(quranStudents,quranMonth);
   const nav='<div class="quran-toolbar"><div class="inline">'+button('','data-quran-month="-1" aria-label="Bulan sebelumnya"','prev','icon')+'<h2>'+html(monthHeading)+'</h2>'+button('','data-quran-month="1" aria-label="Bulan seterusnya"','next','icon')+'</div>'+button('Bulan ini','data-quran-month="0"')+'</div>';
-  const metrics=[['Pelajar',quranStudents.length,summary.completed+' pelajar selesai 3 kelas'],['Kelas selesai',summary.sessions,'Sasaran 3 kelas / pelajar'],['Baki kelas',summary.remaining,'Untuk bulan yang dipilih'],['Bayaran diterima',ringgit(summary.collected),summary.paidCount+' / '+quranStudents.length+' pelajar sudah bayar']];
+  const metrics=[['Pelajar',quranStudents.length,summary.completed+' pelajar selesai 3 kelas'],['Kelas selesai',summary.sessions,'Sasaran 3 kelas / pelajar'],['Baki kelas',summary.remaining,'Untuk bulan yang dipilih'],['Jumlah bayaran',ringgit(summary.earnings),summary.sessions+' kelas × RM'+defaultClassFee]];
   const dashboard='<div class="quran-dashboard" aria-label="Ringkasan kelas bulanan">'+metrics.map(([label,value,detail])=>'<div class="metric"><span class="metric-top">'+label+'</span><strong>'+value+'</strong><span class="small muted">'+detail+'</span></div>').join('')+'</div>';
   const filters='<div class="quran-filters" role="group" aria-label="Tapis status kelas">'+[['all','Semua'],['pending','Masih berbaki'],['3','Selesai']].map(([value,label])=>button(label,'data-quran-filter="'+value+'" aria-pressed="'+(quranFilter===value)+'"','',quranFilter===value?'active':'ghost')).join('')+'</div>';
   const filtered=summary.students.filter(item=>quranFilter==='all'||(quranFilter==='pending'?item.remaining>0:item.remaining===0));
-  const rows=filtered.length?'<div class="quran-rows">'+filtered.map(({student,sessions,count,payment})=>{
+  const rows=filtered.length?'<div class="quran-rows">'+filtered.map(({student,sessions,count})=>{
     const status=quranStatusInfo(count);
     const slots=Array.from({length:Math.max(3,count)},(_,index)=>{
       const session=sessions[index],slot=index+1;
@@ -510,23 +510,9 @@ function quranClassPage(){
       return '<button type="button" class="quran-tick'+(session?' checked':'')+'" data-tick-quran="'+student.id+'"'+(session?' data-session-id="'+session.id+'"':'')+' data-slot="'+slot+'" aria-pressed="'+Boolean(session)+'" aria-label="Kelas '+slot+' · '+html(label)+'" title="'+html(label)+'"><span class="tick-box" aria-hidden="true">'+(session?'✓':'')+'</span><span class="tick-label"><strong>Kelas '+slot+'</strong>'+(session?'<time datetime="'+session.date+'">'+html(shortDate(session.date))+'</time>':'<small>Belum ditanda</small>')+'</span></button>';
     }).join('');
     const extra=count>=3?button('Tambah kelas','data-tick-quran="'+student.id+'" data-slot="'+(count+1)+'"','plus','ghost quran-extra'):'';
-    return '<article class="quran-student-row"><div class="quran-student-info"><div class="quran-name-line">'+(student.code?'<span class="quran-code">'+html(student.code)+'</span>':'')+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button></div><div class="quran-student-meta"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">'+html(student.note)+'</p>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extra+'</div><div class="quran-fee"><span>'+ringgit(student.monthlyFee??defaultMonthlyFee)+'<small class="muted"> / bulan</small></span>'+button(payment?'Sudah bayar · '+ringgit(payment.amount):'Rekod bayaran','data-quran-payment="'+student.id+'"','',payment?'quran-paid':'')+'</div></article>';
+    return '<article class="quran-student-row"><div class="quran-student-info"><div class="quran-name-line">'+(student.code?'<span class="quran-code">'+html(student.code)+'</span>':'')+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button></div><div class="quran-student-meta"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">'+html(student.note)+'</p>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extra+'</div></article>';
   }).join('')+'</div>':blank(quranStudents.length?'Tiada pelajar dalam status ini.':'Belum ada pelajar. Pilih Tambah pelajar untuk bermula.');
   return nav+dashboard+'<section class="panel"><div class="section-head"><div><h2>Senarai pelajar</h2><p class="small muted">Baki kelas terbanyak di atas · '+html(monthHeading)+'</p></div>'+filters+'</div>'+rows+'</section>';
-}
-function quranPaymentForm(studentId){
-  const student=quranStudents.find(item=>item.id===studentId);
-  if(!student)return;
-  const month=quranMonth,payment=monthlyPayment(student,month);
-  openDialog('Bayaran bulanan','<form class="dialog-body" id="quran-payment-form"><p><strong>'+html(student.name)+'</strong><br><span class="muted">'+html(dateLabel(month+'-01',{month:'long',year:'numeric'}))+'</span></p><div class="form-grid"><label>Jumlah bayaran (RM)<input type="number" name="amount" min="0" max="99999.99" step="0.01" inputmode="decimal" required value="'+(payment?.amount??student.monthlyFee??defaultMonthlyFee)+'"></label><label>Tarikh bayaran<input type="date" name="date" min="1900-01-01" max="9999-12-31" required value="'+(payment?.date||today)+'"></label></div><p class="small muted">Kadar boleh disesuaikan untuk bulan ini. Kadar bulanan biasa boleh diubah melalui Sunting maklumat pelajar.</p><div class="dialog-actions">'+(payment?button('Padam bayaran','data-remove-quran-payment="'+student.id+'" data-payment-month="'+month+'"','','left'):'')+button('Batal','data-close')+'<button type="submit" class="btn primary">Simpan bayaran</button></div></form>');
-  $('quran-payment-form').addEventListener('submit',event=>{
-    event.preventDefault();
-    const form=event.currentTarget;
-    const next={month,amount:Number(form.elements.amount.value),date:form.elements.date.value};
-    student.payments=[...(student.payments||[]).filter(item=>item.month!==month),next];
-    student.updatedAt=new Date().toISOString();
-    $('modal').close();save('Bayaran bulanan disimpan');
-  });
 }
 
 function quranTickDialog(studentId,slot=1,sessionId=''){
@@ -569,11 +555,11 @@ function quranStudentDialog(studentId){
   const status=quranStatusInfo(monthSessions.length);
   const allSessions=[...student.sessions].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
   const sessionRows=allSessions.length?'<div class="rows">'+allSessions.map((s,idx)=>'<div class="row"><div class="row-main"><strong>'+html(fullDate(s.date))+'</strong><div class="small muted">Hari kelas direkodkan'+(s.note?' · '+html(s.note):'')+'</div></div><div class="inline">'+button('Tukar tarikh','data-tick-quran="'+student.id+'" data-session-id="'+s.id+'" data-slot="'+(idx+1)+'"')+button('Batal tanda','data-delete-quran-session="'+s.id+'" data-student-id="'+student.id+'"')+'</div></div>').join('')+'</div>':blank('Belum ada tarikh kelas ditandakan untuk pelajar ini.');
-  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body quran-student-detail"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+button('Bayaran bulanan','data-quran-payment="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
+  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body quran-student-detail"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
 }
 function quranStudentForm(studentId){
   const student=quranStudents.find(item=>item.id===studentId);
-  openDialog(student?'Sunting pelajar':'Tambah pelajar Al-Quran','<form class="dialog-body" id="quran-student-form"><div class="form-grid"><label>Kod pelajar (pilihan)<input name="code" maxlength="24" value="'+html(student?.code||'')+'" placeholder="Contoh: 011 / M015"></label><label>Nama pelajar dewasa<input name="name" required maxlength="120" value="'+html(student?.name||'')+'" placeholder="Contoh: ALI BIN MAHMOOD" autofocus></label></div><label>Bayaran bulanan (RM)<input type="number" name="monthlyFee" min="0" max="99999.99" step="0.01" inputmode="decimal" required value="'+(student?.monthlyFee??defaultMonthlyFee)+'"></label><p class="small muted">Kadar asal RM19 sebulan. Boleh ditetapkan mengikut pelajar; rekod bayaran terdahulu dikekalkan.</p><label>Catatan (pilihan)<input name="note" maxlength="240" value="'+html(student?.note||'')+'" placeholder="Pilihan"></label><div class="dialog-actions">'+(student?button('Padam pelajar','data-delete-quran-student="'+student.id+'"','','left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan pelajar</button></div></form>');
+  openDialog(student?'Sunting pelajar':'Tambah pelajar Al-Quran','<form class="dialog-body" id="quran-student-form"><div class="form-grid"><label>Kod pelajar (pilihan)<input name="code" maxlength="24" value="'+html(student?.code||'')+'" placeholder="Contoh: 011 / M015"></label><label>Nama pelajar dewasa<input name="name" required maxlength="120" value="'+html(student?.name||'')+'" placeholder="Contoh: ALI BIN MAHMOOD" autofocus></label></div><label>Catatan (pilihan)<input name="note" maxlength="240" value="'+html(student?.note||'')+'" placeholder="Pilihan"></label><div class="dialog-actions">'+(student?button('Padam pelajar','data-delete-quran-student="'+student.id+'"','','left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan pelajar</button></div></form>');
   const form=$('quran-student-form'),nameInput=form.elements.name;
   nameInput.focus();
   nameInput.addEventListener('input',()=>nameInput.setCustomValidity(''));
@@ -582,7 +568,6 @@ function quranStudentForm(studentId){
     const code=form.elements.code.value.trim();
     const name=nameInput.value.trim();
     const note=form.elements.note.value.trim();
-    const monthlyFee=Number(form.elements.monthlyFee.value);
     if(!name||quranStudents.some(item=>item.id!==student?.id&&item.name.toLowerCase()===name.toLowerCase())){
       nameInput.setCustomValidity(name?'Nama pelajar ini sudah wujud.':'Masukkan nama pelajar.');
       nameInput.reportValidity();
@@ -590,10 +575,10 @@ function quranStudentForm(studentId){
     }
     const now=new Date().toISOString();
     if(student){
-      student.code=code;student.name=name;student.note=note;student.monthlyFee=monthlyFee;student.updatedAt=now;
+      student.code=code;student.name=name;student.note=note;student.updatedAt=now;
       $('modal').close();save('Maklumat pelajar dikemas kini');
     } else {
-      const created={id:'qs-'+crypto.randomUUID(),code,name,note,monthlyFee,payments:[],sessions:[],createdAt:now,updatedAt:now};
+      const created={id:'qs-'+crypto.randomUUID(),code,name,note,sessions:[],createdAt:now,updatedAt:now};
       quranStudents.push(created);
       $('modal').close();save('Pelajar ditambah');
     }
@@ -1178,20 +1163,12 @@ document.addEventListener('click',e=>{
   render();
   return;
  }
- if('quranPayment' in data){quranPaymentForm(data.quranPayment);return;}
- if('removeQuranPayment' in data){
-  const student=quranStudents.find(item=>item.id===data.removeQuranPayment);
-  const payment=student&&monthlyPayment(student,data.paymentMonth);
-  if(!payment)return;
-  student.payments=student.payments.filter(item=>item!==payment);student.updatedAt=new Date().toISOString();
-  $('modal').close();save('Rekod bayaran dipadam',()=>{const current=quranStudents.find(item=>item.id===student.id);if(current&&!monthlyPayment(current,payment.month)){current.payments.push(payment);current.updatedAt=new Date().toISOString();}});return;
- }
  if('addQuranStudent' in data){quranStudentForm();return;}
  if('editQuranStudent' in data){quranStudentForm(data.editQuranStudent);return;}
  if('deleteQuranStudent' in data){
   const student=quranStudents.find(item=>item.id===data.deleteQuranStudent);
   if(!student)return;
-  openDialog('Padam pelajar '+student.name+'?','<div class="dialog-body"><p>Semua rekod tarikh kelas dan bayaran bagi pelajar ini akan turut dipadam.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam pelajar','data-confirm-delete-quran-student="'+student.id+'"','','primary')+'</div></div>');
+  openDialog('Padam pelajar '+student.name+'?','<div class="dialog-body"><p>Semua rekod tarikh kelas bagi pelajar ini akan turut dipadam.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam pelajar','data-confirm-delete-quran-student="'+student.id+'"','','primary')+'</div></div>');
   return;
  }
  if('confirmDeleteQuranStudent' in data){

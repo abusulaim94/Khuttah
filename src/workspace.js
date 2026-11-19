@@ -18,7 +18,7 @@ export function initialQuranStudents() {
     {id: 'qs-265', code: '265', name: 'ZURIYATI', note: '', sessions: [], createdAt: '', updatedAt: ''},
     {id: 'qs-M015', code: 'M015', name: 'SITI NORBAYA', note: '', sessions: [], createdAt: '', updatedAt: ''},
     {id: 'qs-269', code: '269', name: 'AISYAH', note: '', sessions: [], createdAt: '', updatedAt: ''},
-  ].map(student => ({...student, monthlyFee: 19, payments: []}));
+  ];
 }
 export function ensureQuranRoster(state) {
   const isRemoved = name => {
