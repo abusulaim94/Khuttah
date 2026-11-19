@@ -7,7 +7,7 @@ import {createNoteEditor} from './editor.js';
 import {installBookDragging} from './book-drag.js';
 import {publicHolidays, holidayRegions, holidayYears, defaultHolidayRegion} from './holidays.js';
 import {getTheme, setTheme, themeOptions} from './theme.js';
-import {defaultClassFee, summariseQuranMonth} from './quran.js';
+import {summariseQuranMonth} from './quran.js';
 let noteEditor=null;
 
 const drafts=createDraftController();
@@ -492,14 +492,14 @@ function copywritingPage(){
 const ringgit = value => 'RM' + Number(value).toLocaleString('ms-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 function quranStatusInfo(count){
   const remaining=Math.max(0,3-count);
-  return {tier:String(Math.min(3,count)),color:remaining?'pending':'complete',label:remaining?'Baki '+remaining+' kelas':'Selesai',desc:count+' / 3 kelas selesai'};
+  return {tier:String(Math.min(3,count)),color:remaining?'pending':'complete',label:remaining?'Baki '+remaining+' kelas':'Selesai'};
 }
 function quranClassPage(){
   const monthHeading=dateLabel(quranMonth+'-01',{month:'long',year:'numeric'});
   const summary=summariseQuranMonth(quranStudents,quranMonth);
   const nav='<div class="quran-toolbar"><div class="inline">'+button('','data-quran-month="-1" aria-label="Bulan sebelumnya"','prev','icon')+'<h2>'+html(monthHeading)+'</h2>'+button('','data-quran-month="1" aria-label="Bulan seterusnya"','next','icon')+'</div>'+button('Bulan ini','data-quran-month="0"')+'</div>';
-  const metrics=[['Pelajar',quranStudents.length,summary.completed+' pelajar selesai 3 kelas'],['Kelas selesai',summary.sessions,'Sasaran 3 kelas / pelajar'],['Baki kelas',summary.remaining,'Untuk bulan yang dipilih'],['Jumlah bayaran',ringgit(summary.earnings),summary.sessions+' kelas × RM'+defaultClassFee]];
-  const dashboard='<div class="quran-dashboard" aria-label="Ringkasan kelas bulanan">'+metrics.map(([label,value,detail])=>'<div class="metric"><span class="metric-top">'+label+'</span><strong>'+value+'</strong><span class="small muted">'+detail+'</span></div>').join('')+'</div>';
+  const metrics=[['Pelajar',quranStudents.length],['Kelas selesai',summary.sessions],['Baki kelas',summary.remaining],['Jumlah bayaran',ringgit(summary.earnings)]];
+  const dashboard='<div class="quran-dashboard" aria-label="Ringkasan kelas bulanan">'+metrics.map(([label,value])=>'<div class="metric"><span class="metric-top">'+label+'</span><strong>'+value+'</strong></div>').join('')+'</div>';
   const filters='<div class="quran-filters" role="group" aria-label="Tapis status kelas">'+[['all','Semua'],['pending','Masih berbaki'],['3','Selesai']].map(([value,label])=>button(label,'data-quran-filter="'+value+'" aria-pressed="'+(quranFilter===value)+'"','',quranFilter===value?'active':'ghost')).join('')+'</div>';
   const filtered=summary.students.filter(item=>quranFilter==='all'||(quranFilter==='pending'?item.remaining>0:item.remaining===0));
   const rows=filtered.length?'<div class="quran-rows">'+filtered.map(({student,sessions,count})=>{
@@ -507,12 +507,12 @@ function quranClassPage(){
     const slots=Array.from({length:Math.max(3,count)},(_,index)=>{
       const session=sessions[index],slot=index+1;
       const label=session?fullDate(session.date):'Tandakan tarikh kelas '+slot;
-      return '<button type="button" class="quran-tick'+(session?' checked':'')+'" data-tick-quran="'+student.id+'"'+(session?' data-session-id="'+session.id+'"':'')+' data-slot="'+slot+'" aria-pressed="'+Boolean(session)+'" aria-label="Kelas '+slot+' · '+html(label)+'" title="'+html(label)+'"><span class="tick-box" aria-hidden="true">'+(session?'✓':'')+'</span><span class="tick-label"><strong>Kelas '+slot+'</strong>'+(session?'<time datetime="'+session.date+'">'+html(shortDate(session.date))+'</time>':'<small>Belum ditanda</small>')+'</span></button>';
+      return '<button type="button" class="quran-tick'+(session?' checked':'')+'" data-tick-quran="'+student.id+'"'+(session?' data-session-id="'+session.id+'"':'')+' data-slot="'+slot+'" aria-pressed="'+Boolean(session)+'" aria-label="Kelas '+slot+' · '+html(label)+'" title="'+html(label)+'"><span class="tick-box" aria-hidden="true">'+(session?'✓':'')+'</span><span class="tick-label"><strong>Kelas '+slot+'</strong>'+(session?'<time datetime="'+session.date+'">'+html(shortDate(session.date))+'</time>':'')+'</span></button>';
     }).join('');
     const extra=count>=3?button('Tambah kelas','data-tick-quran="'+student.id+'" data-slot="'+(count+1)+'"','plus','ghost quran-extra'):'';
-    return '<article class="quran-student-row"><div class="quran-student-info"><div class="quran-name-line">'+(student.code?'<span class="quran-code">'+html(student.code)+'</span>':'')+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button></div><div class="quran-student-meta"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">'+html(student.note)+'</p>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extra+'</div></article>';
+    return '<article class="quran-student-row"><div class="quran-student-info"><div class="quran-name-line">'+(student.code?'<span class="quran-code">'+html(student.code)+'</span>':'')+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button></div><div class="quran-student-meta"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span></div>'+(student.note?'<p class="small muted">'+html(student.note)+'</p>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extra+'</div></article>';
   }).join('')+'</div>':blank(quranStudents.length?'Tiada pelajar dalam status ini.':'Belum ada pelajar. Pilih Tambah pelajar untuk bermula.');
-  return nav+dashboard+'<section class="panel"><div class="section-head"><div><h2>Senarai pelajar</h2><p class="small muted">Baki kelas terbanyak di atas · '+html(monthHeading)+'</p></div>'+filters+'</div>'+rows+'</section>';
+  return nav+dashboard+'<section class="panel"><div class="section-head"><h2>Senarai pelajar</h2>'+filters+'</div>'+rows+'</section>';
 }
 
 function quranTickDialog(studentId,slot=1,sessionId=''){
@@ -554,8 +554,8 @@ function quranStudentDialog(studentId){
   const monthSessions=student.sessions.filter(s=>s.date.startsWith(quranMonth)).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
   const status=quranStatusInfo(monthSessions.length);
   const allSessions=[...student.sessions].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
-  const sessionRows=allSessions.length?'<div class="rows">'+allSessions.map((s,idx)=>'<div class="row"><div class="row-main"><strong>'+html(fullDate(s.date))+'</strong><div class="small muted">Hari kelas direkodkan'+(s.note?' · '+html(s.note):'')+'</div></div><div class="inline">'+button('Tukar tarikh','data-tick-quran="'+student.id+'" data-session-id="'+s.id+'" data-slot="'+(idx+1)+'"')+button('Batal tanda','data-delete-quran-session="'+s.id+'" data-student-id="'+student.id+'"')+'</div></div>').join('')+'</div>':blank('Belum ada tarikh kelas ditandakan untuk pelajar ini.');
-  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body quran-student-detail"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
+  const sessionRows=allSessions.length?'<div class="rows">'+allSessions.map((s,idx)=>'<div class="row"><div class="row-main"><strong>'+html(fullDate(s.date))+'</strong>'+(s.note?'<div class="small muted">'+html(s.note)+'</div>':'')+'</div><div class="inline">'+button('Tukar tarikh','data-tick-quran="'+student.id+'" data-session-id="'+s.id+'" data-slot="'+(idx+1)+'"')+button('Batal tanda','data-delete-quran-session="'+s.id+'" data-student-id="'+student.id+'"')+'</div></div>').join('')+'</div>':blank('Belum ada tarikh kelas ditandakan untuk pelajar ini.');
+  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body quran-student-detail"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
 }
 function quranStudentForm(studentId){
   const student=quranStudents.find(item=>item.id===studentId);

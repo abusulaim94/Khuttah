@@ -521,7 +521,7 @@ test('kelas Al-Quran mengira jumlah RM19 setiap kelas secara automatik dalam rin
   const remote=await setup(page,state);
   await go(page,'QuranClass');
   await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','3','3','RM57.00']);
-  await expect(page.locator('.quran-dashboard .metric .muted').last()).toHaveText('3 kelas × RM19');
+  await expect(page.locator('.quran-dashboard .metric .muted')).toHaveCount(0);
   await expect(page.locator('[data-quran-payment]')).toHaveCount(0);
   const ali=page.locator('.quran-student-row').filter({has:page.locator('[data-open-student="student-a"]')});
   await expect(ali.locator('.quran-pill')).toHaveText('Baki 3 kelas');
@@ -532,7 +532,6 @@ test('kelas Al-Quran mengira jumlah RM19 setiap kelas secara automatik dalam rin
   await expect(ali.locator('.checked')).toHaveCount(1);
   await expect(ali.locator('.quran-pill')).toHaveText('Baki 2 kelas');
   await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','4','2','RM76.00']);
-  await expect(page.locator('.quran-dashboard .metric .muted').last()).toHaveText('4 kelas × RM19');
   await ali.locator('.checked').click();
   await page.locator('#quran-tick-form [name="date"]').fill(month+'-02');
   await page.locator('#quran-tick-form [type="submit"]').click();
