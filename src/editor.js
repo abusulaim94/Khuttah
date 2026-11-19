@@ -38,7 +38,7 @@ export function createNoteEditor(form) {
     element: host,
     extensions: [StarterKit.configure({link: false, heading: {levels: [1, 2, 3]}}), TaskList, TaskItem.configure({nested: true})],
     content: content(),
-    editorProps: {attributes: {role: 'textbox', 'aria-label': 'Catatan', 'aria-multiline': 'true', spellcheck: 'true'}, transformPastedHTML: safeNoteHtml},
+    editorProps: {attributes: {role: 'textbox', 'aria-label': 'Catatan', 'aria-multiline': 'true', spellcheck: 'true', autocapitalize: 'off'}, transformPastedHTML: safeNoteHtml},
     onUpdate: ({editor}) => updateFields(editor),
     onSelectionUpdate: ({editor}) => updateToolbar(editor),
     onTransaction: ({editor}) => updateToolbar(editor),

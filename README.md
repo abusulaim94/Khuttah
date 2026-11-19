@@ -42,6 +42,11 @@ Fail prototaip dikekalkan untuk rujukan dan eksport data lama. Perubahan baharu 
 
 **Fungsi semasa**
 
+- Tema cerah, gelap atau ikut peranti melalui Tetapan → Umum → Paparan. Pilihan disimpan pada peranti dan meliputi editor serta modal.
+- Navigasi menggunakan saiz font yang seragam. Aplikasi terpasang membenarkan portrait dan landscape; modal mengekalkan huruf yang ditaip tanpa penukaran automatik kepada huruf besar.
+- Kelas Al-Quran menggunakan paparan zink dan pastel dengan ringkasan bulanan, senarai mengikut baki kelas, serta tanda ✓ dan tarikh ringkas. Penanda status terhad pada label dan kotak tanda.
+- Bayaran kelas bermula pada RM19 sebulan dan boleh diubah bagi setiap pelajar. Rekod bayaran mengikut bulan menyimpan amaun serta tarikh sebenar; perubahan kadar tidak mengubah rekod bayaran terdahulu. Pemadaman bayaran menyediakan Buat asal.
+- Subfolder boleh ditambah, disunting dan dipadam dalam halaman kumpulan atau Nota selepas memilih kumpulan. Suntingan mengemas kini nota dan draf berkaitan. Pemadaman mengekalkan nota di kumpulan asal serta menyediakan Buat asal.
 - Ringkasan semua kumpulan, dengan tugasan tertunggak serta tarikh tugasan, acara dan peringatan dalam tujuh hari akan datang. Acara lama tidak dianggap tertunggak; acara berulang menggunakan kemunculan seterusnya.
 - Ringkasan hanya memaparkan rekod belum selesai yang bertarikh. Urusan selesai boleh dirujuk atau dibuka semula melalui Tetapan → Selesai, dan kekal dalam menu asal.
 - Perancang Bulan, Minggu dan Hari. Klik ruang kosong pada tarikh untuk menambah tugasan, acara atau peringatan dengan tarikh siap diisi; papan kekunci menyokong Enter/Space pada petak tarikh.

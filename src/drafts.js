@@ -95,5 +95,18 @@ export function createDraftController() {
     }
     write();
   }
-  return {attach, capture, clear, detach, clearAll, changeTag, keys: () => Object.keys(entries)};
+  function changeSubfolder(folder, previous, next) {
+    const changed = [];
+    for (const [key, entry] of Object.entries(entries)) {
+      if (!key.startsWith('note:Notes:') || !Array.isArray(entry.fields) || !entry.fields.some(field => field.name === 'domain' && field.value === folder)) continue;
+      const field = entry.fields.find(field => field.name === 'subfolder' && field.value === previous);
+      if (field) { field.value = next; changed.push({key, entry, field}); }
+    }
+    write();
+    return () => {
+      for (const {key, entry, field} of changed) if (entries[key] === entry && field.value === next) field.value = previous;
+      write();
+    };
+  }
+  return {attach, capture, clear, detach, clearAll, changeTag, changeSubfolder, keys: () => Object.keys(entries)};
 }

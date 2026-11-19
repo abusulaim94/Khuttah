@@ -6,6 +6,8 @@ import {cleanTagNames, tagScopeOf, changeTag, sortItems, upcomingDeadlines, work
 import {createNoteEditor} from './editor.js';
 import {installBookDragging} from './book-drag.js';
 import {publicHolidays, holidayRegions, holidayYears, defaultHolidayRegion} from './holidays.js';
+import {getTheme, setTheme, themeOptions} from './theme.js';
+import {defaultMonthlyFee, monthlyPayment, summariseQuranMonth} from './quran.js';
 let noteEditor=null;
 
 const drafts=createDraftController();
@@ -322,8 +324,7 @@ function quranNavBadge() {
  if (!quranStudents.length) return '';
  const counts=quranStudents.map(s=>s.sessions.filter(x=>x.date.startsWith(quranMonth)).length);
  const incomplete=counts.filter(c=>c<3).length;
- const minCount=Math.min(...counts,3);
- const color=minCount===0?'red':minCount===1?'yellow':minCount===2?'blue':'green';
+ const color=incomplete?'pending':'complete';
  return '<span class="quran-nav-badge quran-'+color+'" title="'+(incomplete?incomplete+' pelajar belum cukup 3 kelas':'Semua pelajar selesai 3 kelas')+'">'+(incomplete||'✓')+'</span>';
 }
 
@@ -332,7 +333,7 @@ function pageLinks(names,inDialog=false) {
   const [label,symbol]=modules[name];
   const current=page===name;
   const extra=name==='QuranClass'?quranNavBadge():'';
-  return '<button type="button" data-page="'+name+'"'+(inDialog?' data-from-more class="btn'+(current?' active':'')+'"':current?' class="active"':'')+(current?' aria-current="page"':'')+'>'+icon(symbol)+'<span class="nav-text">'+html(label)+'</span>'+extra+'</button>';
+  return '<button type="button" data-page="'+name+'"'+(inDialog?' data-from-more class="btn'+(current?' active':'')+'"':current?' class="active"':'')+(current?' aria-current="page"':'')+'>'+icon(symbol)+'<span class="nav-text">'+html(name==='Works'?'Laman Karya':label)+'</span>'+extra+'</button>';
  }).join('');
 }
 function profileBlock(inDialog=false) {
@@ -385,7 +386,7 @@ function render() {
  $('app-layout').hidden=false;
  $('bottom-nav').hidden=false;
  $('bottom-nav').innerHTML=bottomNavigation();
- $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Kelas Uthmani</h2><nav class="nav" aria-label="Kelas Uthmani">'+pageLinks(['QuranClass'])+'</nav><h2 class="nav-label eyebrow">Karya Abu Sulaim</h2><nav class="nav" aria-label="Karya Abu Sulaim">'+button('Laman Karya','data-page="Works"','book',page==='Works'?'active':'')+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
+ $('sidebar').innerHTML='<div class="brand"><div class="logo">'+icon('logo')+'</div><div><strong>KHUTTAH</strong><small>Ruang kerja peribadi</small></div></div><nav class="nav" aria-label="Menu utama">'+pageLinks(primaryPages)+'</nav><h2 class="nav-label eyebrow">Kelas Uthmani</h2><nav class="nav" aria-label="Kelas Uthmani">'+pageLinks(['QuranClass'])+'</nav><h2 class="nav-label eyebrow">Karya Abu Sulaim</h2><nav class="nav" aria-label="Karya Abu Sulaim">'+pageLinks(['Works'])+'</nav><h2 class="nav-label eyebrow">Ilmu dan Pengetahuan</h2><nav class="nav" aria-label="Ilmu dan Pengetahuan">'+pageLinks(secondaryPages)+'</nav><h2 class="nav-label eyebrow">Kumpulan</h2><nav class="nav domain-nav" aria-label="Kumpulan">'+domainLinks()+'</nav>'+profileBlock();
  const [moduleTitle]=modules[page];
  const title=page==='Group'?domain:moduleTitle;
  $('crumb').textContent=title;
@@ -488,58 +489,46 @@ function copywritingPage(){
   const quick='<form id="quick-copywriting-form" class="quick-work-form"><label class="sr-only" for="quick-copywriting-text">Copywriting pantas</label><textarea id="quick-copywriting-text" name="note" maxlength="20000" rows="3" placeholder="Tulis draf copywriting pantas di sini… (baris pertama menjadi tajuk)" required></textarea><div class="quick-work-actions"><span class="small muted">'+(activeTag?'Disimpan dalam tag: <strong>'+html(activeTag)+'</strong>':'Tiada tag dipilih (masuk ke Semua)')+'</span><button type="submit" class="btn primary">Simpan kad</button></div></form>';
   return '<div class="book-workspace">'+sideNav+'<section class="book-board" aria-label="Papan Copywriting">'+heading+(copywritingArchived?'':quick)+'<div class="board-toolbar">'+sortControl('Copywriting',true)+button('Editor penuh','data-add-note="Copywriting"','plus')+'</div>'+stickyCards(items,'Copywriting')+'</section></div>';
 }
+const ringgit = value => 'RM' + Number(value).toLocaleString('ms-MY', {minimumFractionDigits: 2, maximumFractionDigits: 2});
 function quranStatusInfo(count){
-  if(count<=0)return {tier:'0',color:'red',label:'Tiada kelas (0/3)',desc:'Belum buat kelas langsung'};
-  if(count===1)return {tier:'1',color:'yellow',label:'1 kelas (1/3)',desc:'Perlu 2 kelas lagi'};
-  if(count===2)return {tier:'2',color:'blue',label:'2 kelas (2/3)',desc:'Perlu 1 kelas lagi'};
-  return {tier:'3',color:'green',label:count>3?'Complete ('+count+'/3)':'Complete (3/3)',desc:'Selesai 3 kelas'};
+  const remaining=Math.max(0,3-count);
+  return {tier:String(Math.min(3,count)),color:remaining?'pending':'complete',label:remaining?'Baki '+remaining+' kelas':'Selesai',desc:count+' / 3 kelas selesai'};
 }
 function quranClassPage(){
-  const monthDate=quranMonth+'-01';
-  const monthHeading=dateLabel(monthDate,{month:'long',year:'numeric'});
-  const nav='<div class="toolbar"><div class="inline">'+button('','data-quran-month="-1" aria-label="Bulan sebelumnya"','prev','icon')+button('','data-quran-month="1" aria-label="Bulan seterusnya"','next','icon')+button('Bulan ini','data-quran-month="0"')+'<h2>'+html(monthHeading)+'</h2></div><div class="inline">'+button('Tambah pelajar','data-add-quran-student','plus','primary')+'</div></div>';
-  const studentSummaries=quranStudents.map((student,index)=>{
-    const monthSessions=student.sessions.filter(s=>s.date.startsWith(quranMonth)).sort((a,b)=>a.date.localeCompare(b.date)||a.id.localeCompare(b.id));
-    const count=monthSessions.length;
-    const remaining=Math.max(0,3-count);
+  const monthHeading=dateLabel(quranMonth+'-01',{month:'long',year:'numeric'});
+  const summary=summariseQuranMonth(quranStudents,quranMonth);
+  const nav='<div class="quran-toolbar"><div class="inline">'+button('','data-quran-month="-1" aria-label="Bulan sebelumnya"','prev','icon')+'<h2>'+html(monthHeading)+'</h2>'+button('','data-quran-month="1" aria-label="Bulan seterusnya"','next','icon')+'</div>'+button('Bulan ini','data-quran-month="0"')+'</div>';
+  const metrics=[['Pelajar',quranStudents.length,summary.completed+' pelajar selesai 3 kelas'],['Kelas selesai',summary.sessions,'Sasaran 3 kelas / pelajar'],['Baki kelas',summary.remaining,'Untuk bulan yang dipilih'],['Bayaran diterima',ringgit(summary.collected),summary.paidCount+' / '+quranStudents.length+' pelajar sudah bayar']];
+  const dashboard='<div class="quran-dashboard" aria-label="Ringkasan kelas bulanan">'+metrics.map(([label,value,detail])=>'<div class="metric"><span class="metric-top">'+label+'</span><strong>'+value+'</strong><span class="small muted">'+detail+'</span></div>').join('')+'</div>';
+  const filters='<div class="quran-filters" role="group" aria-label="Tapis status kelas">'+[['all','Semua'],['pending','Masih berbaki'],['3','Selesai']].map(([value,label])=>button(label,'data-quran-filter="'+value+'" aria-pressed="'+(quranFilter===value)+'"','',quranFilter===value?'active':'ghost')).join('')+'</div>';
+  const filtered=summary.students.filter(item=>quranFilter==='all'||(quranFilter==='pending'?item.remaining>0:item.remaining===0));
+  const rows=filtered.length?'<div class="quran-rows">'+filtered.map(({student,sessions,count,payment})=>{
     const status=quranStatusInfo(count);
-    return {student,index,monthSessions,count,remaining,status};
-  }).sort((a,b)=>a.count-b.count||a.index-b.index);
-  const tierCounts={0:0,1:0,2:0,3:0};
-  for(const item of studentSummaries)tierCounts[item.status.tier]++;
-  const totalRemaining=studentSummaries.reduce((sum,item)=>sum+item.remaining,0);
-  const totalCompleted=studentSummaries.reduce((sum,item)=>sum+item.count,0);
-  const statusDefs=[
-    ['0','red','Tiada kelas (0/3)','Belum buat kelas langsung'],
-    ['1','yellow','1 kelas (1/3)','Baki 2 kelas lagi'],
-    ['2','blue','2 kelas (2/3)','Baki 1 kelas lagi'],
-    ['3','green','Complete (3/3)','Selesai sasaran 3 kelas'],
-  ];
-  const notifGrid='<div class="quran-status-grid" role="group" aria-label="Ringkasan status kelas pelajar">'+statusDefs.map(([tier,color,title,sub])=>{
-    const active=quranFilter===tier;
-    return '<button type="button" class="quran-status-card quran-'+color+(active?' active':'')+'" data-quran-filter="'+(active?'all':tier)+'" aria-pressed="'+active+'"><div class="quran-status-top"><span class="quran-dot"></span><strong>'+title+'</strong></div><div class="quran-status-num">'+tierCounts[tier]+' <small>pelajar</small></div><span class="small">'+sub+'</span></button>';
-  }).join('')+'</div>';
-  const summaryBar='<div class="quran-summary-bar"><span class="small">Jumlah pelajar: <strong>'+quranStudents.length+' orang</strong> · Kelas selesai: <strong>'+totalCompleted+'</strong> · Baki perlu dibuat: <strong>'+totalRemaining+' kelas</strong></span>'+(quranFilter!=='all'?button('Tunjuk semua pelajar','data-quran-filter="all"','','ghost'):'')+'</div>';
-  const filtered=quranFilter==='all'?studentSummaries:studentSummaries.filter(item=>item.status.tier===quranFilter);
-  const rows=filtered.length?'<div class="rows quran-rows">'+filtered.map(({student,monthSessions,count,status})=>{
-    const codeBadge=student.code?'<span class="quran-code">'+html(student.code)+'</span>':'';
-    const notifPill='<span class="quran-pill quran-'+status.color+'"><span class="quran-dot"></span>'+html(status.label)+'</span>';
-    const slots=[1,2,3].map(slot=>{
-      const session=monthSessions[slot-1];
-      if(session){
-        return '<button type="button" class="quran-tick checked" data-tick-quran="'+student.id+'" data-session-id="'+session.id+'" data-slot="'+slot+'" aria-pressed="true" title="Klik untuk tukar hari/tarikh atau batal tanda"><span class="tick-box" aria-hidden="true">✓</span><span class="tick-label"><strong>Kelas '+slot+'</strong><small>'+html(dayShortDate(session.date))+'</small></span></button>';
-      }
-      return '<button type="button" class="quran-tick" data-tick-quran="'+student.id+'" data-slot="'+slot+'" aria-pressed="false" title="Tandakan Kelas '+slot+'"><span class="tick-box" aria-hidden="true"></span><span class="tick-label"><strong>Kelas '+slot+'</strong><small>Tick hari</small></span></button>';
+    const slots=Array.from({length:Math.max(3,count)},(_,index)=>{
+      const session=sessions[index],slot=index+1;
+      const label=session?fullDate(session.date):'Tandakan tarikh kelas '+slot;
+      return '<button type="button" class="quran-tick'+(session?' checked':'')+'" data-tick-quran="'+student.id+'"'+(session?' data-session-id="'+session.id+'"':'')+' data-slot="'+slot+'" aria-pressed="'+Boolean(session)+'" aria-label="Kelas '+slot+' · '+html(label)+'" title="'+html(label)+'"><span class="tick-box" aria-hidden="true">'+(session?'✓':'')+'</span><span class="tick-label"><strong>Kelas '+slot+'</strong>'+(session?'<time datetime="'+session.date+'">'+html(shortDate(session.date))+'</time>':'<small>Belum ditanda</small>')+'</span></button>';
     }).join('');
-    const extraSlots=monthSessions.slice(3).map((session,idx)=>{
-      const slot=idx+4;
-      return '<button type="button" class="quran-tick checked extra" data-tick-quran="'+student.id+'" data-session-id="'+session.id+'" data-slot="'+slot+'" aria-pressed="true"><span class="tick-box" aria-hidden="true">✓</span><span class="tick-label"><strong>Kelas '+slot+'</strong><small>'+html(dayShortDate(session.date))+'</small></span></button>';
-    }).join('');
-    const addExtraBtn=count>=3?'<button type="button" class="quran-tick extra-add" data-tick-quran="'+student.id+'" data-slot="'+(count+1)+'" title="Tambah kelas tambahan Minggu 4/5"><span class="tick-box" aria-hidden="true">+</span><span class="tick-label"><strong>Tambahan</strong><small>Minggu 4/5</small></span></button>':'';
-    return '<div class="row quran-student-row quran-row-'+status.color+'"><div class="row-main quran-student-info"><div class="inline quran-name-line">'+codeBadge+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button>'+notifPill+'</div>'+(student.note?'<div class="small muted">'+html(student.note)+'</div>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extraSlots+addExtraBtn+'</div></div>';
-  }).join('')+'</div>':blank('Tiada pelajar dalam kategori ini.');
-  return '<section class="panel">'+nav+summaryBar+'</section><div class="settings-gap"></div>'+notifGrid+section('Senarai pelajar (disusun mengikut paling sedikit kelas)',rows);
+    const extra=count>=3?button('Tambah kelas','data-tick-quran="'+student.id+'" data-slot="'+(count+1)+'"','plus','ghost quran-extra'):'';
+    return '<article class="quran-student-row"><div class="quran-student-info"><div class="quran-name-line">'+(student.code?'<span class="quran-code">'+html(student.code)+'</span>':'')+'<button type="button" class="row-title" data-open-student="'+student.id+'">'+html(student.name)+'</button></div><div class="quran-student-meta"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">'+html(student.note)+'</p>':'')+'</div><div class="quran-ticks" role="group" aria-label="Tandakan kelas '+html(student.name)+'">'+slots+extra+'</div><div class="quran-fee"><span>'+ringgit(student.monthlyFee??defaultMonthlyFee)+'<small class="muted"> / bulan</small></span>'+button(payment?'Sudah bayar · '+ringgit(payment.amount):'Rekod bayaran','data-quran-payment="'+student.id+'"','',payment?'quran-paid':'')+'</div></article>';
+  }).join('')+'</div>':blank(quranStudents.length?'Tiada pelajar dalam status ini.':'Belum ada pelajar. Pilih Tambah pelajar untuk bermula.');
+  return nav+dashboard+'<section class="panel"><div class="section-head"><div><h2>Senarai pelajar</h2><p class="small muted">Baki kelas terbanyak di atas · '+html(monthHeading)+'</p></div>'+filters+'</div>'+rows+'</section>';
 }
+function quranPaymentForm(studentId){
+  const student=quranStudents.find(item=>item.id===studentId);
+  if(!student)return;
+  const month=quranMonth,payment=monthlyPayment(student,month);
+  openDialog('Bayaran bulanan','<form class="dialog-body" id="quran-payment-form"><p><strong>'+html(student.name)+'</strong><br><span class="muted">'+html(dateLabel(month+'-01',{month:'long',year:'numeric'}))+'</span></p><div class="form-grid"><label>Jumlah bayaran (RM)<input type="number" name="amount" min="0" max="99999.99" step="0.01" inputmode="decimal" required value="'+(payment?.amount??student.monthlyFee??defaultMonthlyFee)+'"></label><label>Tarikh bayaran<input type="date" name="date" min="1900-01-01" max="9999-12-31" required value="'+(payment?.date||today)+'"></label></div><p class="small muted">Kadar boleh disesuaikan untuk bulan ini. Kadar bulanan biasa boleh diubah melalui Sunting maklumat pelajar.</p><div class="dialog-actions">'+(payment?button('Padam bayaran','data-remove-quran-payment="'+student.id+'" data-payment-month="'+month+'"','','left'):'')+button('Batal','data-close')+'<button type="submit" class="btn primary">Simpan bayaran</button></div></form>');
+  $('quran-payment-form').addEventListener('submit',event=>{
+    event.preventDefault();
+    const form=event.currentTarget;
+    const next={month,amount:Number(form.elements.amount.value),date:form.elements.date.value};
+    student.payments=[...(student.payments||[]).filter(item=>item.month!==month),next];
+    student.updatedAt=new Date().toISOString();
+    $('modal').close();save('Bayaran bulanan disimpan');
+  });
+}
+
 function quranTickDialog(studentId,slot=1,sessionId=''){
   const student=quranStudents.find(item=>item.id===studentId);
   if(!student)return;
@@ -580,11 +569,11 @@ function quranStudentDialog(studentId){
   const status=quranStatusInfo(monthSessions.length);
   const allSessions=[...student.sessions].sort((a,b)=>b.date.localeCompare(a.date)||b.id.localeCompare(a.id));
   const sessionRows=allSessions.length?'<div class="rows">'+allSessions.map((s,idx)=>'<div class="row"><div class="row-main"><strong>'+html(fullDate(s.date))+'</strong><div class="small muted">Hari kelas direkodkan'+(s.note?' · '+html(s.note):'')+'</div></div><div class="inline">'+button('Tukar tarikh','data-tick-quran="'+student.id+'" data-session-id="'+s.id+'" data-slot="'+(idx+1)+'"')+button('Batal tanda','data-delete-quran-session="'+s.id+'" data-student-id="'+student.id+'"')+'</div></div>').join('')+'</div>':blank('Belum ada tarikh kelas ditandakan untuk pelajar ini.');
-  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'"><span class="quran-dot"></span>'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
+  openDialog((student.code?student.code+' · ':'')+student.name,'<div class="dialog-body quran-student-detail"><div class="detail panel"><div class="inline"><span class="quran-pill quran-'+status.color+'">'+html(status.label)+'</span><span class="small muted">'+html(status.desc)+'</span></div>'+(student.note?'<p class="small muted">Catatan: '+html(student.note)+'</p>':'')+'</div><div class="inline">'+button('Tandakan hari kelas','data-tick-quran="'+student.id+'" data-slot="'+(monthSessions.length+1)+'"','plus','primary')+button('Sunting maklumat pelajar','data-edit-quran-student="'+student.id+'"')+button('Bayaran bulanan','data-quran-payment="'+student.id+'"')+'</div><h3>Tarikh & hari kelas yang telah ditandakan</h3>'+sessionRows+'<div class="dialog-actions">'+button('Tutup','data-close')+'</div></div>');
 }
 function quranStudentForm(studentId){
   const student=quranStudents.find(item=>item.id===studentId);
-  openDialog(student?'Sunting pelajar':'Tambah pelajar Al-Quran','<form class="dialog-body" id="quran-student-form"><div class="form-grid"><label>Kod pelajar (pilihan)<input name="code" maxlength="24" value="'+html(student?.code||'')+'" placeholder="Contoh: 011 / M015"></label><label>Nama pelajar dewasa<input name="name" required maxlength="120" value="'+html(student?.name||'')+'" placeholder="Contoh: ALI BIN MAHMOOD" autofocus></label></div><label>Catatan (pilihan)<input name="note" maxlength="240" value="'+html(student?.note||'')+'" placeholder="Pilihan"></label><div class="dialog-actions">'+(student?button('Padam pelajar','data-delete-quran-student="'+student.id+'"','','left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan pelajar</button></div></form>');
+  openDialog(student?'Sunting pelajar':'Tambah pelajar Al-Quran','<form class="dialog-body" id="quran-student-form"><div class="form-grid"><label>Kod pelajar (pilihan)<input name="code" maxlength="24" value="'+html(student?.code||'')+'" placeholder="Contoh: 011 / M015"></label><label>Nama pelajar dewasa<input name="name" required maxlength="120" value="'+html(student?.name||'')+'" placeholder="Contoh: ALI BIN MAHMOOD" autofocus></label></div><label>Bayaran bulanan (RM)<input type="number" name="monthlyFee" min="0" max="99999.99" step="0.01" inputmode="decimal" required value="'+(student?.monthlyFee??defaultMonthlyFee)+'"></label><p class="small muted">Kadar asal RM19 sebulan. Boleh ditetapkan mengikut pelajar; rekod bayaran terdahulu dikekalkan.</p><label>Catatan (pilihan)<input name="note" maxlength="240" value="'+html(student?.note||'')+'" placeholder="Pilihan"></label><div class="dialog-actions">'+(student?button('Padam pelajar','data-delete-quran-student="'+student.id+'"','','left'):'')+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan pelajar</button></div></form>');
   const form=$('quran-student-form'),nameInput=form.elements.name;
   nameInput.focus();
   nameInput.addEventListener('input',()=>nameInput.setCustomValidity(''));
@@ -593,6 +582,7 @@ function quranStudentForm(studentId){
     const code=form.elements.code.value.trim();
     const name=nameInput.value.trim();
     const note=form.elements.note.value.trim();
+    const monthlyFee=Number(form.elements.monthlyFee.value);
     if(!name||quranStudents.some(item=>item.id!==student?.id&&item.name.toLowerCase()===name.toLowerCase())){
       nameInput.setCustomValidity(name?'Nama pelajar ini sudah wujud.':'Masukkan nama pelajar.');
       nameInput.reportValidity();
@@ -600,10 +590,10 @@ function quranStudentForm(studentId){
     }
     const now=new Date().toISOString();
     if(student){
-      student.code=code;student.name=name;student.note=note;student.updatedAt=now;
+      student.code=code;student.name=name;student.note=note;student.monthlyFee=monthlyFee;student.updatedAt=now;
       $('modal').close();save('Maklumat pelajar dikemas kini');
     } else {
-      const created={id:'qs-'+crypto.randomUUID(),code,name,note,sessions:[],createdAt:now,updatedAt:now};
+      const created={id:'qs-'+crypto.randomUUID(),code,name,note,monthlyFee,payments:[],sessions:[],createdAt:now,updatedAt:now};
       quranStudents.push(created);
       $('modal').close();save('Pelajar ditambah');
     }
@@ -758,10 +748,10 @@ function groupPage() {
  const tasksList=sorted(items.filter(item=>item.type==='task'&&!item.done),'Group');
  const remindersList=sorted(items.filter(item=>item.type==='reminder'&&!item.done),'Group');
  const eventsList=sorted(itemsInRange(today,add(today,30),['event']),'Group');
- const groupNotes=sorted(visible(notes),'Group',true);
+ const groupNotes=sorted(visible(notes).filter(item=>!selectedSubfolder||item.subfolder===selectedSubfolder),'Group',true);
  const counts=[['Tugasan',tasksList.length,'Tasks'],['Acara · 30 hari',eventsList.length,'Events'],['Peringatan',remindersList.length,'Reminders']].map(([label,count,target])=>'<button class="metric" data-page="'+target+'"><span class="metric-top">'+label+'</span><strong>'+count+'</strong></button>').join('');
  const rows=groupNotes.map(item=>'<div class="row"><div class="row-main"><button class="row-title" data-note="'+notes.indexOf(item)+'">'+html(item.title)+'</button><p class="small muted">'+html((item.kind==='Idea rambang'?'Khawatir':item.kind)+(item.subfolder?' · '+item.subfolder:''))+'</p>'+tagBadges(item)+'</div></div>').join('');
- return '<div class="board-toolbar">'+sortControl('Group')+'</div><div class="metrics">'+counts+'</div><div class="overview-lists">'+section('Tugasan',taskRows(tasksList),button('Tambah','data-new="task"','plus'))+section('Acara · 30 hari',scheduleRows(eventsList),button('Tambah','data-new="event"','plus'))+section('Peringatan',taskRows(remindersList,'Tiada peringatan.'),button('Tambah','data-new="reminder"','plus'))+'</div><div class="group-notes">'+section('Nota dan rujukan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada nota dalam kumpulan ini.'),button('Tambah nota','data-add-note="Notes"','plus'))+'</div>';
+ return '<div class="board-toolbar">'+sortControl('Group')+'</div><div class="metrics">'+counts+'</div><div class="overview-lists">'+section('Tugasan',taskRows(tasksList),button('Tambah','data-new="task"','plus'))+section('Acara · 30 hari',scheduleRows(eventsList),button('Tambah','data-new="event"','plus'))+section('Peringatan',taskRows(remindersList,'Tiada peringatan.'),button('Tambah','data-new="reminder"','plus'))+'</div><div class="group-notes">'+subfolderToolbar()+section('Nota dan rujukan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada nota dalam kumpulan ini.'),button('Tambah nota','data-add-note="Notes"','plus'))+'</div>';
 }
 function selectDomain(current, emptyLabel) {
  return '<option value="">'+emptyLabel+'</option>'+domains.map(name=>'<option value="'+html(name)+'" '+(name===current?'selected':'')+'>'+html(name)+'</option>').join('');
@@ -786,7 +776,7 @@ function planner() {
   const holiday=holidayOn(day),rest=dateOf(day).getUTCDay()===5||Boolean(holiday);
   const items=scheduledOn(day,['task','event','reminder']);
   const limit=view==='Month'?2:7;
-  return '<div data-create-day="'+day+'" tabindex="0" role="group" aria-label="'+html(fullDate(day)+(holiday?' · '+holiday:''))+'" class="cell'+(rest?' calendar-rest':'')+(holiday?' public-holiday':'')+(day.slice(0,7)!==focus.slice(0,7)?' outside':'')+'"><button class="day-num'+(day===today?' today':'')+'" data-day="'+day+'" aria-label="Buka '+fullDate(day)+'">'+Number(day.slice(8))+'</button>'+(holiday?'<span class="holiday-name" title="'+html(holiday)+'">'+html(holiday)+'</span>':'')+items.slice(0,limit).map(item=>'<button class="event'+(item.type==='reminder'?' deadline':'')+'" data-edit="'+item.id+'" title="'+html(types[item.type]+' · '+item.title+' · '+domainName(item.domain)+(item.type==='task'?' · '+priorities[taskPriority(item)]:''))+'">'+priorityMarker(item,true)+html((item.type==='reminder'?'Deadline · ':item.time?item.time+' ':item.type==='task'?'Tugasan · ':'')+item.title)+(item.repeat?' <span class="recurrence" aria-label="Berulang setiap minggu">↻</span>':'')+'</button>').join('')+(items.length>limit?'<button class="event more" data-day="'+day+'">+'+(items.length-limit)+' lagi</button>':'')+'</div>';
+  return '<div data-create-day="'+day+'" tabindex="0" role="group" aria-label="'+html(fullDate(day)+(holiday?' · '+holiday:''))+'" class="cell'+(rest?' calendar-rest':'')+(holiday?' public-holiday':'')+(day.slice(0,7)!==focus.slice(0,7)?' outside':'')+'"><button class="day-num'+(day===today?' today':'')+'" data-day="'+day+'" aria-label="Buka '+fullDate(day)+'">'+Number(day.slice(8))+'</button>'+(holiday?'<span class="holiday-name" title="'+html(holiday)+'">'+html(holiday)+'</span>':'')+items.slice(0,limit).map(item=>'<button class="event'+(item.type==='reminder'?' deadline':'')+'" data-edit="'+item.id+'" title="'+html(types[item.type]+' · '+item.title+' · '+domainName(item.domain)+(item.type==='task'?' · '+priorities[taskPriority(item)]:''))+'">'+priorityMarker(item,true)+html((item.time?item.time+' ':'')+item.title)+(item.repeat?' <span class="recurrence" aria-label="Berulang setiap minggu">↻</span>':'')+'</button>').join('')+(items.length>limit?'<button class="event more" data-day="'+day+'">+'+(items.length-limit)+' lagi</button>':'')+'</div>';
  }).join('');
  return '<section class="panel">'+nav+'<div class="calendar-scroll" tabindex="0" aria-label="Jadual kalendar"><div class="calendar '+view.toLowerCase()+'">'+['Ahd','Isn','Sel','Rab','Kha','Jum','Sab'].map((day,index)=>'<div class="weekday'+(index===5?' calendar-rest':'')+'">'+day+'</div>').join('')+cells+'</div></div></section>'+legend+agenda;
 }
@@ -848,29 +838,50 @@ function eventsPage() {
 function subfolderOptions(folder,current,emptyLabel) {
  return '<option value="">'+emptyLabel+'</option>'+subfolders.filter(item=>item.folder===folder).map(({name})=>'<option value="'+html(name)+'"'+(name===current?' selected':'')+'>'+html(name)+'</option>').join('');
 }
-function subfolderForm() {
+function subfolderForm(previous='') {
  const folder=domain;
- openDialog('Tambah subfolder','<form id="subfolder-form" class="dialog-body"><p class="small muted">'+html(folder)+'</p><label>Nama subfolder<input name="name" maxlength="48" required autofocus></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan subfolder</button></div></form>');
- const form=$('subfolder-form');
- const field=form.elements.name;
+ if(!folder)return;
+ openDialog(previous?'Sunting subfolder':'Tambah subfolder','<form id="subfolder-form" class="dialog-body"><p class="small muted">'+html(folder)+'</p><label>Nama subfolder<input name="name" maxlength="48" required autofocus value="'+html(previous)+'"></label><div class="dialog-actions">'+button('Batal','data-close')+'<button class="btn primary" type="submit">Simpan subfolder</button></div></form>');
+ const form=$('subfolder-form'),field=form.elements.name;
  field.focus();
  field.addEventListener('input',()=>field.setCustomValidity(''));
  form.addEventListener('submit',event=>{
   event.preventDefault();
   const name=field.value.trim();
-  if (!name || subfolders.some(item=>item.folder===folder&&item.name.toLowerCase()===name.toLowerCase())) {
-   field.setCustomValidity(name?'Nama subfolder sudah digunakan.':'Masukkan nama subfolder.');
-   field.reportValidity();
-   return;
+  if(!name||subfolders.some(item=>item.folder===folder&&item.name!==previous&&item.name.toLowerCase()===name.toLowerCase())){
+   field.setCustomValidity(name?'Nama subfolder sudah digunakan.':'Masukkan nama subfolder.');field.reportValidity();return;
   }
-  subfolders.push({folder,name});
-  selectedSubfolder=name;
-  $('modal').close();
-  save('Subfolder ditambah');
+  if(previous){
+   const entry=subfolders.find(item=>item.folder===folder&&item.name===previous);
+   if(!entry)return;
+   entry.name=name;
+   for(const note of notes)if(note.domain===folder&&note.subfolder===previous)note.subfolder=name;
+   drafts.changeSubfolder(folder,previous,name);
+  }else subfolders.push({folder,name});
+  selectedSubfolder=name;$('modal').close();save(previous?'Subfolder dikemas kini':'Subfolder ditambah');
  });
 }
+function subfolderToolbar(){
+ if(!domain)return '<p class="small muted subfolder-hint">Pilih kumpulan untuk mengurus subfolder.</p>';
+ return '<div class="subfolder-nav"><select class="filter" id="subfolder-select" aria-label="Tapis mengikut subfolder">'+subfolderOptions(domain,selectedSubfolder,'Semua subfolder')+'</select>'+button('Tambah subfolder','data-add-subfolder','plus')+(selectedSubfolder?button('Sunting','data-edit-subfolder aria-label="Sunting subfolder"')+button('Padam','data-delete-subfolder aria-label="Padam subfolder"'):'')+'</div>';
+}
+function deleteSubfolder(){
+ const folder=domain,name=selectedSubfolder;
+ const index=subfolders.findIndex(item=>item.folder===folder&&item.name===name);
+ if(index<0)return;
+ const [removed]=subfolders.splice(index,1),affected=notes.filter(item=>item.domain===folder&&item.subfolder===name).map(item=>item.id);
+ for(const note of notes)if(affected.includes(note.id))note.subfolder='';
+ const restoreDrafts=drafts.changeSubfolder(folder,name,'');
+ selectedSubfolder='';$('modal').close();
+ save('Subfolder dipadam; nota dikekalkan',()=>{
+  if(!subfolders.some(item=>item.folder===folder&&item.name===name))subfolders.splice(Math.min(index,subfolders.length),0,removed);
+  for(const note of notes)if(affected.includes(note.id)&&note.domain===folder&&!note.subfolder)note.subfolder=name;
+  restoreDrafts();
+ });
+}
+
 function personalNotes() {
-  const folders=domain?'<div class="subfolder-nav"><select class="filter" id="subfolder-select" aria-label="Tapis mengikut subfolder">'+subfolderOptions(domain,selectedSubfolder,'Semua subfolder')+'</select>'+button('Tambah subfolder','data-add-subfolder','plus')+'</div>':'';
+  const folders=subfolderToolbar();
   const items=sorted(visible(notes).filter(item=>item.kind==='Nota peribadi'&&(!selectedSubfolder||item.subfolder===selectedSubfolder)&&tagged(item,'Notes')),'Notes',true);
   return folders+tagNav('Notes')+section('Nota',noteCards(items),sortControl('Notes',true));
 }
@@ -946,7 +957,8 @@ function settings() {
   const installBtn=isStandaloneApp()?'':button('Pasang aplikasi','data-install-app');
   const calendarPanel=section('Cuti umum','<div class="detail"><label class="holiday-setting">Kalendar cuti<select class="filter" id="holiday-region">'+Object.entries(holidayRegions).map(([id,label])=>'<option value="'+id+'"'+(id===holidayRegion?' selected':'')+'>'+label+'</option>').join('')+'</select></label><p class="small muted">Takwim 2026–2027 · <a href="https://www.kabinet.gov.my/hari-kelepasan-am/" target="_blank" rel="noopener">Sumber rasmi BKPP JPM</a>. Tarikh perayaan tertakluk kepada pengumuman rasmi.</p></div>');
   const cloudPanel=section('Penyelarasan awan & akaun','<div class="detail"><p><strong>'+html(email)+'</strong></p><p class="small muted">'+html(syncStatus)+'</p>'+(syncError?'<p class="small sync-error" role="alert">'+html(syncError)+'</p>':'')+'<div class="backup-actions">'+button(syncBusy?'Menyelaraskan…':'Selaraskan sekarang','data-sync-now'+(syncBusy?' disabled':''))+installBtn+button('Log keluar','data-sign-out')+'</div></div>');
-  return switches+cloudPanel+'<div class="settings-gap"></div>'+calendarPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
+  const themePanel=section('Paparan','<div class="detail"><label class="holiday-setting">Tema aplikasi<select class="filter" id="theme-select">'+Object.entries(themeOptions).map(([value,label])=>'<option value="'+value+'"'+(getTheme()===value?' selected':'')+'>'+label+'</option>').join('')+'</select></label><p class="small muted">Pilihan tema disimpan pada peranti ini.</p></div>');
+  return switches+themePanel+'<div class="settings-gap"></div>'+cloudPanel+'<div class="settings-gap"></div>'+calendarPanel+'<div class="settings-gap"></div>'+section('Sandaran data','<div class="detail"><p class="muted">Data disimpan dalam awan dan pelayar ini. Eksport sandaran JSON untuk membuat salinan tambahan.</p><div class="backup-actions">'+button('Eksport sandaran','data-export')+button('Import sandaran','data-import')+'</div><p class="small muted">Sandaran merangkumi rekod dan nota yang telah disimpan. Draf kekal dalam pelayar ini.</p></div>');
  }
  const rows=domains.map((name,index)=>'<div class="row"><div class="row-main"><strong>'+html(name)+'</strong></div><div class="inline settings-row-actions">'+button('Sunting','data-rename-domain="'+index+'" aria-label="Sunting kumpulan '+html(name)+'"')+button('Buang','data-remove-domain="'+index+'" aria-label="Buang kumpulan '+html(name)+'"')+'</div></div>').join('');
  return switches+section('Urus kumpulan',rows?'<div class="rows">'+rows+'</div>':blank('Tiada kumpulan ditetapkan.'),button('Tambah kumpulan','data-add-domain','plus','primary'));
@@ -1050,6 +1062,7 @@ function domainForm(index) {
 function openDialog(title, body) {
  drafts.detach();
  noteEditor?.destroy(); noteEditor=null; $('modal').classList.remove('note-expanded');
+ $('modal').setAttribute('autocapitalize','off');
  $('modal').innerHTML='<div class="section-head"><h2 id="modal-title">'+html(title)+'</h2>'+button('','data-close aria-label="Tutup dialog"','close','icon ghost')+'</div>'+body;
  if (!$('modal').open) $('modal').showModal();
 }
@@ -1165,12 +1178,20 @@ document.addEventListener('click',e=>{
   render();
   return;
  }
+ if('quranPayment' in data){quranPaymentForm(data.quranPayment);return;}
+ if('removeQuranPayment' in data){
+  const student=quranStudents.find(item=>item.id===data.removeQuranPayment);
+  const payment=student&&monthlyPayment(student,data.paymentMonth);
+  if(!payment)return;
+  student.payments=student.payments.filter(item=>item!==payment);student.updatedAt=new Date().toISOString();
+  $('modal').close();save('Rekod bayaran dipadam',()=>{const current=quranStudents.find(item=>item.id===student.id);if(current&&!monthlyPayment(current,payment.month)){current.payments.push(payment);current.updatedAt=new Date().toISOString();}});return;
+ }
  if('addQuranStudent' in data){quranStudentForm();return;}
  if('editQuranStudent' in data){quranStudentForm(data.editQuranStudent);return;}
  if('deleteQuranStudent' in data){
   const student=quranStudents.find(item=>item.id===data.deleteQuranStudent);
   if(!student)return;
-  openDialog('Padam pelajar '+student.name+'?','<div class="dialog-body"><p>Semua rekod tarikh kelas bagi pelajar ini akan turut dipadam.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam pelajar','data-confirm-delete-quran-student="'+student.id+'"','','primary')+'</div></div>');
+  openDialog('Padam pelajar '+student.name+'?','<div class="dialog-body"><p>Semua rekod tarikh kelas dan bayaran bagi pelajar ini akan turut dipadam.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam pelajar','data-confirm-delete-quran-student="'+student.id+'"','','primary')+'</div></div>');
   return;
  }
  if('confirmDeleteQuranStudent' in data){
@@ -1313,6 +1334,9 @@ document.addEventListener('click',e=>{
   return;
  }
  if ('addSubfolder' in data){ subfolderForm(); return; }
+ if ('editSubfolder' in data){subfolderForm(selectedSubfolder);return;}
+ if ('deleteSubfolder' in data){openDialog('Padam subfolder '+selectedSubfolder+'?','<div class="dialog-body"><p>Nota dalam subfolder ini akan dikekalkan dalam kumpulan '+html(domain)+'.</p><div class="dialog-actions">'+button('Batal','data-close')+button('Padam subfolder','data-confirm-delete-subfolder','','primary')+'</div></div>');return;}
+ if ('confirmDeleteSubfolder' in data){deleteSubfolder();return;}
  if ('chapter' in data){ selectedChapter[page]=Number(data.chapter); render(); document.querySelector('[data-chapter="'+data.chapter+'"]').focus(); return; }
  if ('addNote' in data){ noteForm(data.addNote,undefined,Number(data.inChapter||0)); return; }
  if ('deleteNote' in data){
@@ -1342,6 +1366,7 @@ document.addEventListener('change',e=>{
  if('sortScope' in control.dataset){sorting[control.dataset.sortScope]=control.value;try{localStorage.setItem('khuttah-sorting-v1',JSON.stringify(sorting));}catch{}render();document.querySelector('[data-sort-scope="'+control.dataset.sortScope+'"]').focus();return;}
  if(control.id==='task-date-filter'){taskDates=control.value;render();$('task-date-filter').focus();return;}
  if ('moveNote' in control.dataset){ moveThesisNote(Number(control.dataset.moveNote),Number(control.value)); return; }
+ if (control.id==='theme-select'){setTheme(control.value);return;}
  if (control.id==='subfolder-select'){ selectedSubfolder=control.value; render(); $('subfolder-select').focus(); return; }
  if (control.id==='domain-select'){ domain=control.value; pageDomains[page]=domain; selectedSubfolder=''; if (page==='Group'&&!domain) page='Overview'; render(); ($('domain-select')||$('main').querySelector('h1')).focus(); return; }
  if ('check' in control.dataset){

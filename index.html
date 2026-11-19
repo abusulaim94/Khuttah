@@ -13,9 +13,12 @@
 <link rel="icon" type="image/svg+xml" href="./favicon.svg">
 <link rel="apple-touch-icon" href="./icon-192.png">
 <link rel="manifest" href="./manifest.webmanifest">
+<script>
+try { const theme = localStorage.getItem('khuttah-theme-v1'); document.documentElement.dataset.theme = theme === 'dark' || theme !== 'light' && matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light'; } catch {}
+</script>
 <link rel="stylesheet" href="./src/styles.css">
 </head>
-<body>
+<body autocapitalize="sentences">
 <div id="install-banner" class="install-banner" role="region" aria-label="Pasang aplikasi" hidden></div>
 <main class="auth-gate" id="auth-gate"></main>
 <div class="layout" id="app-layout" hidden>

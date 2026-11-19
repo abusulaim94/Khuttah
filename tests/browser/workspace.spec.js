@@ -1,5 +1,5 @@
 import {test, expect} from '@playwright/test';
-import {mkdirSync} from 'node:fs';
+import {mkdirSync, readFileSync} from 'node:fs';
 
 const today = new Intl.DateTimeFormat('en-CA', {timeZone: 'Asia/Kuala_Lumpur', year: 'numeric', month: '2-digit', day: '2-digit'}).format(new Date());
 const dateAfter = days => { const date = new Date(today + 'T12:00:00Z'); date.setUTCDate(date.getUTCDate() + days); return date.toISOString().slice(0, 10); };
@@ -35,6 +35,7 @@ async function setup(page, state = seed(), {writeDelay = 0} = {}) {
 }
 
 async function go(page, scope) {
+  await expect(page.locator('#app-layout')).toBeVisible();
   const side = page.locator('#sidebar [data-page="' + scope + '"]');
   if (await side.isVisible()) await side.click();
   else {
@@ -299,7 +300,7 @@ test('paparan desktop, tablet landscape/portrait dan telefon tanpa limpahan', as
     await page.setViewportSize({width, height});
     if (width >= 900 && width > height) { await expect(page.locator('#sidebar')).toBeVisible(); await expect(page.locator('#bottom-nav')).toBeHidden(); }
     else await expect(page.locator('#bottom-nav')).toBeVisible();
-    for (const scope of ['Overview', 'Planner', 'Tasks', 'Events', 'Reminders', 'Notes', 'Knowledge', 'Master', 'PhD', 'Works', 'Ideas', 'Settings']) {
+    for (const scope of ['Overview', 'Planner', 'Tasks', 'Events', 'Reminders', 'Notes', 'Knowledge', 'Master', 'PhD', 'Works', 'Ideas', 'QuranClass', 'Copywriting', 'Settings']) {
       await go(page, scope);
       if(scope==='Planner')await expect(page.locator('#actions [data-new] .new-label')).toBeVisible();
       const overflow = await page.evaluate(() => document.documentElement.scrollWidth - document.documentElement.clientWidth);
@@ -474,4 +475,153 @@ test('pemegang sentuh boleh menyeret sticky note ke folder buku', async ({browse
     expect((await saved(page)).notes.find(item => item.id === note.id).bookId).toBe('book-nota-mudah');
     expect(failures).toEqual([]);
   } finally { await context.close(); }
+});
+
+test('tema cerah/gelap kekal, mengikut peranti dan modal mobile mengekalkan huruf asal', async ({page}) => {
+  await page.emulateMedia({colorScheme:'light'});
+  await setup(page);
+  await expect(page.locator('#sidebar [data-page="Works"]')).toHaveCSS('font-size', await page.locator('#sidebar [data-page="Notes"]').evaluate(node=>getComputedStyle(node).fontSize));
+  await expect(page.locator('#sidebar [data-page="Works"]')).toHaveCSS('font-weight', '400');
+  await go(page,'Settings');
+  await page.locator('[data-settings="General"]').click();
+  await page.locator('#theme-select').selectOption('dark');
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.reload();
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await go(page,'QuranClass');
+  mkdirSync('.local/qa',{recursive:true});
+  await page.screenshot({path:'.local/qa/quran-dark-desktop.png',fullPage:true});
+  await page.setViewportSize({width:390,height:844});
+  await go(page,'Notes');
+  await page.locator('#actions [data-add-note]').click();
+  await page.getByRole('textbox',{name:'Tajuk',exact:true}).fill('Nota ejaan asal');
+  const editor=page.getByRole('textbox',{name:'Catatan',exact:true});
+  await editor.fill('ayat kecil, Nama Khas dan ABC.');
+  await expect(editor).toHaveCSS('text-transform','none');
+  await expect(editor).toHaveAttribute('autocapitalize','off');
+  await expect(page.locator('#modal-title')).toHaveCSS('text-transform','none');
+  await expect(page.locator('.note-paper')).toHaveCSS('background-color','rgb(30, 30, 33)');
+  await page.screenshot({path:'.local/qa/note-dark-mobile.png'});
+  await page.locator('#personal-note-form [type="submit"]').click();
+  expect((await saved(page)).notes.find(note=>note.title==='Nota ejaan asal').note).toBe('ayat kecil, Nama Khas dan ABC.');
+  await go(page,'Settings');
+  await page.locator('[data-settings="General"]').click();
+  await page.locator('#theme-select').selectOption('system');
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+  await page.emulateMedia({colorScheme:'dark'});
+  await expect(page.locator('html')).toHaveAttribute('data-theme','dark');
+  await page.locator('#theme-select').selectOption('light');
+  await expect(page.locator('html')).toHaveAttribute('data-theme','light');
+});
+
+test('kelas dan bayaran bulanan berkadar tersuai disimpan, diselaraskan dan boleh dibatalkan', async ({page}) => {
+  const month=today.slice(0,7),state=seed();
+  state.quranSeedVersion=1;
+  state.quranStudents=[{id:'student-a',name:'Ali bin Ahmad',code:'001',sessions:[]},{id:'student-b',name:'Siti Aminah',code:'002',monthlyFee:30,sessions:['01','02','03'].map(day=>({id:'class-'+day,date:month+'-'+day}))}];
+  const remote=await setup(page,state);
+  await go(page,'QuranClass');
+  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','3','3','RM0.00']);
+  const ali=page.locator('.quran-student-row').filter({has:page.locator('[data-open-student="student-a"]')});
+  await expect(ali.locator('.quran-pill')).toHaveText('Baki 3 kelas');
+  await expect(ali).toHaveCSS('background-color','rgba(0, 0, 0, 0)');
+  await ali.locator('[data-tick-quran]').first().click();
+  await page.locator('#quran-tick-form [name="date"]').fill(month+'-01');
+  await page.locator('#quran-tick-form [type="submit"]').click();
+  await expect(ali.locator('.checked')).toHaveCount(1);
+  await expect(ali.locator('.quran-pill')).toHaveText('Baki 2 kelas');
+  await ali.locator('.checked').click();
+  await page.locator('#quran-tick-form [name="date"]').fill(month+'-02');
+  await page.locator('#quran-tick-form [type="submit"]').click();
+  expect((await saved(page)).quranStudents[0].sessions[0].date).toBe(month+'-02');
+  await ali.locator('[data-open-student]').click();
+  await page.locator('[data-edit-quran-student]').click();
+  await expect(page.locator('[name="monthlyFee"]')).toHaveValue('19');
+  await page.locator('[name="monthlyFee"]').fill('25.50');
+  await page.locator('#quran-student-form [type="submit"]').click();
+  await ali.locator('[data-quran-payment]').click();
+  await expect(page.locator('[name="amount"]')).toHaveValue('25.5');
+  await page.locator('#quran-payment-form [type="submit"]').click();
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM25.50');
+  await expect.poll(()=>remote().quranStudents[0].payments?.[0]?.amount).toBe(25.5);
+  await page.locator('[data-quran-month="1"]').click();
+  await expect(page.locator('.quran-dashboard .metric strong')).toHaveText(['2','0','6','RM0.00']);
+  await expect(ali.locator('[data-quran-payment]')).toHaveText('Rekod bayaran');
+  await page.locator('[data-quran-month="-1"]').click();
+  await ali.locator('[data-open-student]').click();
+  await page.locator('[data-edit-quran-student]').click();
+  await page.locator('[name="monthlyFee"]').fill('30');
+  await page.locator('#quran-student-form [type="submit"]').click();
+  await expect(ali.locator('[data-quran-payment]')).toHaveText('Sudah bayar · RM25.50');
+  await ali.locator('[data-quran-payment]').click();
+  await page.locator('[data-remove-quran-payment]').click();
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM0.00');
+  await page.locator('[data-undo]').click();
+  await expect(page.locator('.quran-dashboard .metric strong').last()).toHaveText('RM25.50');
+  await page.locator('[data-quran-filter="3"]').click();
+  await expect(page.locator('.quran-student-row')).toHaveCount(1);
+  await expect(page.locator('.quran-student-row')).toContainText('Siti Aminah');
+  await page.locator('[data-quran-filter="all"]').click();
+  await expect.poll(()=>remote().quranStudents[0].monthlyFee).toBe(30);
+  await expect.poll(()=>remote().quranStudents[0].payments.length).toBe(1);
+  await page.reload();await go(page,'QuranClass');
+  await expect(ali.locator('[data-quran-payment]')).toHaveText('Sudah bayar · RM25.50');
+  for(const [width,height] of [[1440,1000],[1024,768],[390,844],[320,740]]){
+    await page.setViewportSize({width,height});
+    expect(await page.evaluate(()=>document.documentElement.scrollWidth-document.documentElement.clientWidth)).toBeLessThanOrEqual(1);
+    await page.screenshot({path:'.local/qa/quran-'+width+'.png',fullPage:true});
+  }
+  await ali.locator('[data-quran-payment]').click();
+  expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
+  await page.locator('#modal [data-close]').first().click();
+  await ali.locator('[data-open-student]').click();
+  expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
+  await page.locator('[data-edit-quran-student]').click();
+  expect(await page.locator('#modal').evaluate(node=>node.scrollWidth-node.clientWidth)).toBeLessThanOrEqual(1);
+});
+
+test('subfolder boleh ditambah, disunting dan dipadam tanpa kehilangan nota atau draf', async ({page}) => {
+  const state=seed();
+  state.subfolders=[{folder:'Peribadi',name:'Kajian awal'}];state.notes[0].subfolder='Kajian awal';
+  await setup(page,state);
+  await page.evaluate(()=>localStorage.setItem('khuttah-drafts-v1',JSON.stringify({'note:Notes:note-1':{fields:[{name:'domain',value:'Peribadi'},{name:'subfolder',value:'Kajian awal'},{name:'title',value:'Nota asal'},{name:'note',value:'Draf masih ada'}]}})));
+  await page.reload();await go(page,'Notes');
+  await page.locator('#domain-select').selectOption('Peribadi');
+  await page.locator('[data-add-subfolder]').click();
+  await page.locator('#subfolder-form [name="name"]').fill('Baharu');
+  await page.locator('#subfolder-form [type="submit"]').click();
+  await expect(page.locator('#subfolder-select')).toHaveValue('Baharu');
+  await page.locator('[data-edit-subfolder]').click();
+  await page.locator('#subfolder-form [name="name"]').fill('KAJIAN AWAL');
+  await page.locator('#subfolder-form [type="submit"]').click();
+  await expect(page.locator('#modal')).toBeVisible();
+  expect(await page.locator('#subfolder-form [name="name"]').evaluate(node=>node.validationMessage)).toBe('Nama subfolder sudah digunakan.');
+  await page.locator('#modal [data-close]').first().click();
+  await page.locator('#subfolder-select').selectOption('Kajian awal');
+  await page.locator('[data-edit-subfolder]').click();
+  await page.locator('#subfolder-form [name="name"]').fill('Kajian dikemas kini');
+  await page.locator('#subfolder-form [type="submit"]').click();
+  expect((await saved(page)).notes[0].subfolder).toBe('Kajian dikemas kini');
+  const draftFolder=()=>page.evaluate(()=>JSON.parse(localStorage.getItem('khuttah-drafts-v1'))['note:Notes:note-1'].fields.find(field=>field.name==='subfolder').value);
+  expect(await draftFolder()).toBe('Kajian dikemas kini');
+  await page.locator('[data-delete-subfolder]').click();
+  await page.locator('[data-confirm-delete-subfolder]').click();
+  expect((await saved(page)).notes[0].subfolder).toBe('');
+  expect((await saved(page)).notes[0].note).toBe('Catatan asal');
+  expect(await draftFolder()).toBe('');
+  await page.locator('[data-undo]').click();
+  expect((await saved(page)).notes[0].subfolder).toBe('Kajian dikemas kini');
+  expect(await draftFolder()).toBe('Kajian dikemas kini');
+  await page.locator('[data-note="0"]').click();
+  await expect(page.locator('[name="subfolder"]')).toHaveValue('Kajian dikemas kini');
+  await expect(page.getByRole('textbox',{name:'Catatan',exact:true})).toHaveText('Draf masih ada');
+});
+
+test('manifest membenarkan landscape dan kalendar memaparkan tajuk tanpa tag jenis', async ({page}) => {
+  expect(JSON.parse(readFileSync('public/manifest.webmanifest','utf8')).orientation).toBe('any');
+  await setup(page);await go(page,'Planner');
+  await expect(page.locator('.calendar [data-edit="task-1"]')).toHaveText('Zeta tugasan');
+  await expect(page.locator('.calendar [data-edit="event-1"]')).toHaveText('14:00 Acara kumpulan lain');
+  await expect(page.locator('.calendar [data-edit="reminder-1"]')).toHaveText('Peringatan bayaran');
+  await page.locator('.calendar [data-edit="task-1"]').click();
+  await expect(page.locator('#item-form [name="type"]')).toHaveValue('task');
 });
