@@ -1,0 +1,39 @@
+<!doctype html>
+<html lang="ms">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <meta name="theme-color" content="#142d29">
+  <meta name="description" content="KHUTTAH — prototaip ruang kerja peribadi dengan reka bentuk premium.">
+  <title>KHUTTAH — Ruang untuk yang bermakna</title>
+  <link rel="icon" href="../../public/favicon.svg" type="image/svg+xml">
+  <link rel="stylesheet" href="styles.css">
+  <script src="app.js" defer></script>
+</head>
+<body>
+  <a class="skip-link" href="#main">Terus ke kandungan</a>
+  <button class="scrim" id="scrim" aria-label="Tutup navigasi" hidden></button>
+  <aside class="sidebar" id="sidebar" aria-label="Navigasi utama">
+    <a href="#overview" class="brand"><span class="brand-symbol">خ</span><span>KHUTTAH<small>RUANG KERJA PERIBADI</small></span></a>
+    <div class="workspace-label"><span class="monogram">AS</span><div>Ruang Abu Sulaim<small>Peribadi · Edisi premium</small></div></div>
+    <p class="nav-heading">RUANG KERJA</p>
+    <nav id="primary-nav"></nav>
+    <p class="nav-heading group-heading">KUMPULAN ANDA</p>
+    <nav id="group-nav"></nav>
+    <div class="sidebar-bottom">
+      <div class="sidebar-note"><span class="tiny-star">✧</span><p>Sedikit, tetapi bermakna.<small>Berikan ruang untuk yang utama.</small></p></div>
+      <button class="profile" data-action="settings"><span class="avatar">AS</span><span>Abu Sulaim<small>Tetapan prototaip</small></span><span data-icon="settings"></span></button>
+    </div>
+  </aside>
+  <div class="shell">
+    <header class="topbar">
+      <div class="breadcrumb"><button class="icon-button mobile-menu" id="menu" aria-label="Buka navigasi" aria-expanded="false" aria-controls="sidebar"><span data-icon="menu"></span></button><span class="breadcrumb-root">Ruang kerja <span class="slash">/</span></span><span id="crumb">Ringkasan</span></div>
+      <div class="top-actions"><button class="search-trigger" data-action="search"><span data-icon="search"></span><span>Cari di ruang anda</span><kbd>Ctrl K</kbd></button><span class="preview-badge">PROTOTAIP</span><span class="top-avatar" aria-label="Profil Abu Sulaim">AS</span></div>
+    </header>
+    <main id="main" tabindex="-1"></main>
+    <footer class="page-footer"><span>KHUTTAH <span class="footer-separator">/</span> Ruang untuk yang bermakna.</span><span>Pratonton reka bentuk · Data contoh</span></footer>
+  </div>
+  <dialog id="dialog" aria-labelledby="dialog-title"></dialog>
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+</body>
+</html>
